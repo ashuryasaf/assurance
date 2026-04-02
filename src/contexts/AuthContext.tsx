@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import type { User, UserRole } from '@/lib/types';
 import { hasPermission } from '@/lib/types';
 import { mockUsers } from '@/lib/mockData';
@@ -32,21 +32,19 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const DEMO_PASSWORD = 'Demo1234!';
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+function getInitialUser(): User | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = localStorage.getItem('assurance_user');
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('assurance_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {
-        localStorage.removeItem('assurance_user');
-      }
-    }
-    setIsLoading(false);
-  }, []);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(getInitialUser);
+  const [isLoading] = useState(false);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     const demoUser = mockUsers.find(u => u.email === email);

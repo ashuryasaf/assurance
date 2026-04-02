@@ -14,9 +14,8 @@ export default function RecordingsPage() {
   useEffect(() => {
     if (isRecording) {
       timerRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setRecordingTime(0);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRecording]);

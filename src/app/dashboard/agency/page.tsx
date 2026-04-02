@@ -1,14 +1,12 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { mockAgencies, mockUsers } from '@/lib/mockData';
 import { ROLE_LABELS_HE } from '@/lib/types';
 import { useState } from 'react';
 
 export default function AgencyPage() {
   const { t } = useLanguage();
-  const { user } = useAuth();
   const [showAddAgent, setShowAddAgent] = useState(false);
 
   const agency = mockAgencies[0];

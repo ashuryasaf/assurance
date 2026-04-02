@@ -3,7 +3,7 @@
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { aiResponses } from '@/lib/mockData';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface Message {
   id: string;
@@ -12,69 +12,82 @@ interface Message {
   timestamp: Date;
 }
 
+let msgCounter = 0;
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function getResponse(query: string): string {
+  const lower = query.toLowerCase();
+  const categories = Object.keys(aiResponses);
+  for (const cat of categories) {
+    if (lower.includes(cat) || (cat === 'policies' && (lower.includes('פוליס') || lower.includes('ביטוח') || lower.includes('חיסכון')))
+      || (cat === 'regulatory' && (lower.includes('מסלקה') || lower.includes('פנסיה') || lower.includes('הר') || lower.includes('גמל')))
+      || (cat === 'investments' && (lower.includes('השקע') || lower.includes('תיק') || lower.includes('תשואה')))
+      || (cat === 'documents' && (lower.includes('מסמך') || lower.includes('נתח') || lower.includes('קובץ')))
+      || (cat === 'affiliate' && (lower.includes('שותף') || lower.includes('עמלה') || lower.includes('הפניה')))) {
+      return pickRandom(aiResponses[cat]);
+    }
+  }
+  return pickRandom(aiResponses.default);
+}
+
 export default function AIAssistantPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1', role: 'assistant', timestamp: new Date(),
-      content: `שלום ${user?.firstName || ''}! 👋 אני העוזר החכם של Assurance. אני יכול לעזור לך עם:\n\n• 📋 ניתוח פוליסות וחיסכון\n• 🏛️ נתונים מהמסלקה, הר הביטוח וגמל נט\n• 📈 ניתוח תיק השקעות\n• 📁 ניתוח מסמכים שהועלו\n• 🤝 ניהול שותפים ועמלות\n\nמה תרצה לדעת?`,
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (!initialized.current) {
+      initialized.current = true;
+      setMessages([{
+        id: '1', role: 'assistant', timestamp: new Date(),
+        content: `שלום ${user?.firstName || ''}! 👋 אני העוזר החכם של Assurance. אני יכול לעזור לך עם:\n\n• 📋 ניתוח פוליסות וחיסכון\n• 🏛️ נתונים מהמסלקה, הר הביטוח וגמל נט\n• 📈 ניתוח תיק השקעות\n• 📁 ניתוח מסמכים שהועלו\n• 🤝 ניהול שותפים ועמלות\n\nמה תרצה לדעת?`,
+      }]);
+    }
+  }, [user?.firstName]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const suggestedQuestions = [
-    { label: 'סקירת פוליסות', query: 'ספר לי על הפוליסות שלי', category: 'policies' },
-    { label: 'נתוני מסלקה', query: 'מה המצב בפנסיה שלי?', category: 'regulatory' },
-    { label: 'ניתוח השקעות', query: 'איך התיק השקעות שלי?', category: 'investments' },
-    { label: 'ניתוח מסמכים', query: 'נתח את המסמכים שלי', category: 'documents' },
-    { label: 'המלצות חיסכון', query: 'איפה אני יכול לחסוך?', category: 'policies' },
-    { label: 'דוח שותפים', query: 'מה מצב השותפים שלי?', category: 'affiliate' },
+    { label: 'סקירת פוליסות', query: 'ספר לי על הפוליסות שלי' },
+    { label: 'נתוני מסלקה', query: 'מה המצב בפנסיה שלי?' },
+    { label: 'ניתוח השקעות', query: 'איך התיק השקעות שלי?' },
+    { label: 'ניתוח מסמכים', query: 'נתח את המסמכים שלי' },
+    { label: 'המלצות חיסכון', query: 'איפה אני יכול לחסוך?' },
+    { label: 'דוח שותפים', query: 'מה מצב השותפים שלי?' },
   ];
 
-  const getResponse = (query: string): string => {
-    const lower = query.toLowerCase();
-    const categories = Object.keys(aiResponses);
-    for (const cat of categories) {
-      if (lower.includes(cat) || (cat === 'policies' && (lower.includes('פוליס') || lower.includes('ביטוח') || lower.includes('חיסכון')))
-        || (cat === 'regulatory' && (lower.includes('מסלקה') || lower.includes('פנסיה') || lower.includes('הר') || lower.includes('גמל')))
-        || (cat === 'investments' && (lower.includes('השקע') || lower.includes('תיק') || lower.includes('תשואה')))
-        || (cat === 'documents' && (lower.includes('מסמך') || lower.includes('נתח') || lower.includes('קובץ')))
-        || (cat === 'affiliate' && (lower.includes('שותף') || lower.includes('עמלה') || lower.includes('הפניה')))) {
-        const responses = aiResponses[cat];
-        return responses[Math.floor(Math.random() * responses.length)];
-      }
-    }
-    const defaults = aiResponses.default;
-    return defaults[Math.floor(Math.random() * defaults.length)];
-  };
-
-  const handleSend = (text?: string) => {
+  const handleSend = useCallback((text?: string) => {
     const msg = text || input;
     if (!msg.trim()) return;
 
+    msgCounter++;
     const userMsg: Message = {
-      id: Date.now().toString(), role: 'user', content: msg.trim(), timestamp: new Date(),
+      id: `user-${msgCounter}`, role: 'user', content: msg.trim(), timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsTyping(true);
 
+    const response = getResponse(msg);
+    const delay = 1000 + Math.random() * 1500;
     setTimeout(() => {
-      const response = getResponse(msg);
+      msgCounter++;
       const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(), role: 'assistant', content: response, timestamp: new Date(),
+        id: `ai-${msgCounter}`, role: 'assistant', content: response, timestamp: new Date(),
       };
       setMessages(prev => [...prev, assistantMsg]);
       setIsTyping(false);
-    }, 1000 + Math.random() * 1500);
-  };
+    }, delay);
+  }, [input]);
 
   return (
     <div className="animate-fadeIn" style={{ maxWidth: '1000px', margin: '0 auto', height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column' }}>
