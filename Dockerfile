@@ -13,6 +13,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Force cache invalidation - add current timestamp
+ARG BUILD_DATE=unknown
+RUN echo "Build date: $BUILD_DATE"
+
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
