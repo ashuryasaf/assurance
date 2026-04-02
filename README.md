@@ -1,6 +1,6 @@
 # אשורי סוכנות לביטוח — Ashuri Insurance Agency Portal
 
-A comprehensive Israeli insurance agency client portal built with Next.js 14, TypeScript, and Tailwind CSS.
+A comprehensive Israeli insurance agency client portal built with Next.js 16, TypeScript, and Tailwind CSS.
 
 ## Features
 
