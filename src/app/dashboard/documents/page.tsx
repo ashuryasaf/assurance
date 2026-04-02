@@ -1,221 +1,203 @@
 'use client';
 
-import { useState, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockDocuments, Document } from '@/lib/mockData';
-
-const typeIcons: Record<string, string> = {
-  policy: '📋',
-  claim: '📝',
-  invoice: '🧾',
-  report: '📊',
-  identification: '🪪',
-  other: '📄',
-};
+import { mockDocuments } from '@/lib/mockData';
+import { useState, useRef } from 'react';
+import type { Document } from '@/lib/types';
 
 export default function DocumentsPage() {
   const { t } = useLanguage();
-  const [documents, setDocuments] = useState<Document[]>(mockDocuments);
-  const [filter, setFilter] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [docs, setDocs] = useState<Document[]>(mockDocuments);
+  const [dragOver, setDragOver] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [filter, setFilter] = useState('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filters = ['all', 'policy', 'claim', 'invoice', 'report', 'other'];
-  const filterLabels: Record<string, string> = {
-    all: t('all'),
-    policy: 'פוליסות',
-    claim: 'תביעות',
-    invoice: 'חשבוניות',
-    report: 'דוחות',
-    other: 'אחר',
+  const handleUpload = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const newDoc: Document = {
+        id: `d${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        type: 'other',
+        mimeType: file.type,
+        size: file.size,
+        uploadDate: new Date().toISOString().split('T')[0],
+        uploadedBy: '4',
+        status: 'pending',
+        clientId: '4',
+        tags: [],
+        aiAnalysis: undefined,
+      };
+      setDocs(prev => [newDoc, ...prev]);
+      setTimeout(() => {
+        setDocs(prev => prev.map(d => d.id === newDoc.id ? {
+          ...d, status: 'processed' as const,
+          aiAnalysis: {
+            summary: `מסמך "${file.name}" נותח בהצלחה על ידי AI. נמצאו נתונים רלוונטיים.`,
+            extractedData: { filename: file.name, size: `${(file.size / 1024).toFixed(0)} KB`, type: file.type },
+            recommendations: ['המסמך נשמר בהצלחה', 'ניתוח AI הושלם'],
+            processedAt: new Date().toISOString(), confidence: 0.88,
+          },
+        } : d));
+      }, 3000);
+    });
   };
 
-  const filtered = documents.filter(d => {
-    const matchType = filter === 'all' || d.type === filter;
-    const matchSearch = !searchTerm || d.name.includes(searchTerm) || (d.relatedPolicyNumber && d.relatedPolicyNumber.includes(searchTerm));
-    return matchType && matchSearch;
-  });
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    handleFiles(files);
+  const statusColors: Record<string, { bg: string; color: string }> = {
+    pending: { bg: '#fff3cd', color: '#856404' },
+    processed: { bg: '#d4edda', color: '#155724' },
+    signed: { bg: '#cce5ff', color: '#004085' },
+    archived: { bg: '#e2e3e5', color: '#383d41' },
+    rejected: { bg: '#f8d7da', color: '#721c24' },
   };
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      handleFiles(Array.from(e.target.files));
-    }
+  const statusLabels: Record<string, string> = {
+    pending: t('pending'), processed: t('processed'), signed: t('signed'),
+    archived: t('archived'), rejected: t('rejected'),
   };
 
-  const handleFiles = (files: File[]) => {
-    const newDocs: Document[] = files.map((file, i) => ({
-      id: `new-${Date.now()}-${i}`,
-      name: file.name,
-      type: 'other' as const,
-      size: `${Math.round(file.size / 1024)} KB`,
-      uploadDate: new Date().toISOString().split('T')[0],
-      requiresSignature: false,
-      signed: false,
-    }));
-    setDocuments(prev => [...newDocs, ...prev]);
-    setUploadSuccess(true);
-    setTimeout(() => setUploadSuccess(false), 3000);
-  };
+  const filteredDocs = filter === 'all' ? docs : docs.filter(d => d.status === filter);
 
   return (
-    <div className="animate-fadeIn">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#1e3a6e' }}>{t('myDocuments')}</h1>
-          <p style={{ color: '#6b7a9a', fontSize: '14px', marginTop: '4px' }}>
-            {t('totalDocuments')}: {documents.length}
-          </p>
-        </div>
-      </div>
+    <div className="animate-fadeIn" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '28px', fontWeight: '800', color: '#1e3a6e', marginBottom: '24px' }}>
+        📁 {t('documentManagement')}
+      </h1>
 
-      {/* Upload area */}
+      {/* Upload Area */}
       <div
-        onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={handleDrop}
+        className="card"
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files); }}
         onClick={() => fileInputRef.current?.click()}
         style={{
-          border: `2px dashed ${isDragOver ? '#1e3a6e' : '#c8dbf0'}`,
-          borderRadius: '16px',
-          padding: '40px',
-          textAlign: 'center',
-          cursor: 'pointer',
-          background: isDragOver ? '#f0f6ff' : '#f8faff',
-          transition: 'all 0.2s',
-          marginBottom: '24px',
+          padding: '40px', marginBottom: '24px', textAlign: 'center', cursor: 'pointer',
+          border: dragOver ? '3px dashed #c9a227' : '3px dashed #dae8f8',
+          background: dragOver ? '#fdf6e3' : '#f8f9fc',
+          borderRadius: '14px', transition: 'all 0.2s',
         }}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-          onChange={handleFileInput}
-          style={{ display: 'none' }}
-        />
-        <div style={{ fontSize: '40px', marginBottom: '12px' }}>📤</div>
-        <div style={{ fontWeight: '700', color: '#1e3a6e', fontSize: '16px', marginBottom: '6px' }}>
-          {t('dragDropUpload')}
-        </div>
-        <div style={{ color: '#6b7a9a', fontSize: '13px' }}>{t('supportedFormats')}</div>
+        <div style={{ fontSize: '48px', marginBottom: '12px' }}>{dragOver ? '📥' : '📤'}</div>
+        <div style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '6px' }}>{t('dragDrop')}</div>
+        <div style={{ color: '#6b7a9a', fontSize: '14px', marginBottom: '4px' }}>{t('orBrowse')}</div>
+        <div style={{ color: '#6b7a9a', fontSize: '12px' }}>{t('supportedFormats')}</div>
+        <input ref={fileInputRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv,.zip,.jpg,.jpeg,.png,.doc,.docx" style={{ display: 'none' }}
+          onChange={e => handleUpload(e.target.files)} />
       </div>
-
-      {uploadSuccess && (
-        <div className="animate-fadeIn" style={{
-          background: '#f0fdf4', border: '1px solid #86efac', color: '#16a34a',
-          padding: '12px 16px', borderRadius: '10px', marginBottom: '16px',
-          fontWeight: '600', fontSize: '14px',
-        }}>
-          ✅ {t('documentUploaded')}
-        </div>
-      )}
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ flex: 1, minWidth: '200px' }}>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder={`🔍 ${t('search')}...`}
-            className="input-field"
-            style={{ fontSize: '14px' }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {filters.map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              style={{
-                padding: '7px 14px', borderRadius: '20px', border: '1.5px solid',
-                borderColor: filter === f ? '#1e3a6e' : '#d1dce8',
-                background: filter === f ? '#1e3a6e' : 'white',
-                color: filter === f ? 'white' : '#6b7a9a',
-                cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s',
-              }}
-            >
-              {filterLabels[f]}
-            </button>
-          ))}
-        </div>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {['all', 'pending', 'processed', 'signed', 'archived'].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            padding: '6px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+            background: filter === f ? '#1e3a6e' : '#f0f6ff', color: filter === f ? 'white' : '#1e3a6e',
+            fontWeight: '600', fontSize: '12px',
+          }}>
+            {f === 'all' ? 'הכל' : statusLabels[f]} ({f === 'all' ? docs.length : docs.filter(d => d.status === f).length})
+          </button>
+        ))}
       </div>
 
-      {/* Documents table */}
-      {filtered.length > 0 ? (
-        <div className="card">
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('documentName')}</th>
-                  <th>{t('documentType')}</th>
-                  <th>{t('relatedPolicy')}</th>
-                  <th>{t('uploadDate')}</th>
-                  <th>{t('fileSize')}</th>
-                  <th>{t('status')}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(doc => (
-                  <tr key={doc.id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '20px' }}>{typeIcons[doc.type]}</span>
-                        <span style={{ fontWeight: '600', color: '#1a2744' }}>{doc.name}</span>
-                      </div>
-                    </td>
-                    <td style={{ color: '#6b7a9a' }}>{filterLabels[doc.type] || doc.type}</td>
-                    <td style={{ fontSize: '13px', color: '#6b7a9a' }}>{doc.relatedPolicyNumber || '—'}</td>
-                    <td style={{ color: '#6b7a9a' }}>{new Date(doc.uploadDate).toLocaleDateString('he-IL')}</td>
-                    <td style={{ color: '#6b7a9a' }}>{doc.size}</td>
-                    <td>
-                      {doc.requiresSignature && !doc.signed && (
-                        <span className="badge-pending">✍️ ממתין לחתימה</span>
-                      )}
-                      {doc.signed && (
-                        <span className="badge-active">✅ נחתם</span>
-                      )}
-                      {!doc.requiresSignature && !doc.signed && (
-                        <span style={{ color: '#6b7a9a', fontSize: '13px' }}>—</span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button style={{
-                          padding: '5px 10px', background: '#f0f6ff', border: '1px solid #c8dbf0',
-                          borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#1e3a6e', fontWeight: '600',
-                        }}>
-                          👁️ {t('view')}
-                        </button>
-                        <button style={{
-                          padding: '5px 10px', background: '#f0fdf4', border: '1px solid #86efac',
-                          borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#16a34a', fontWeight: '600',
-                        }}>
-                          ⬇️ {t('download')}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+      {/* Documents Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
+        {filteredDocs.map(doc => (
+          <div key={doc.id} className="card" style={{ padding: '18px', cursor: 'pointer' }}
+            onClick={() => setSelectedDoc(doc)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '24px' }}>
+                  {doc.mimeType.includes('pdf') ? '📄' : doc.mimeType.includes('sheet') || doc.mimeType.includes('excel') ? '📊' : doc.mimeType.includes('zip') ? '📦' : '📎'}
+                </span>
+                <div>
+                  <div style={{ fontWeight: '600', color: '#1e3a6e', fontSize: '14px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {doc.name}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#6b7a9a' }}>
+                    {(doc.size / 1024 / 1024).toFixed(1)} MB • {doc.uploadDate}
+                  </div>
+                </div>
+              </div>
+              <span style={{
+                padding: '3px 10px', borderRadius: '8px', fontSize: '10px', fontWeight: '700',
+                background: statusColors[doc.status]?.bg, color: statusColors[doc.status]?.color,
+              }}>
+                {statusLabels[doc.status]}
+              </span>
+            </div>
+            {doc.tags.length > 0 && (
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {doc.tags.map(tag => (
+                  <span key={tag} style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '10px', background: '#f0f6ff', color: '#2451a0', fontWeight: '600' }}>
+                    {tag}
+                  </span>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            )}
+            {doc.aiAnalysis && (
+              <div style={{ padding: '8px 12px', background: '#fdf6e3', borderRadius: '8px', fontSize: '12px', color: '#856404' }}>
+                🤖 {doc.aiAnalysis.summary.substring(0, 80)}...
+              </div>
+            )}
+            {doc.status === 'pending' && (
+              <div style={{ marginTop: '8px', height: '4px', background: '#e0e0e0', borderRadius: '2px', overflow: 'hidden' }}>
+                <div className="animate-loading" style={{ width: '60%', height: '100%', background: 'linear-gradient(90deg, #c9a227, #1e3a6e, #c9a227)', backgroundSize: '200%', animation: 'loading 1.5s ease-in-out infinite' }} />
+              </div>
+            )}
           </div>
-        </div>
-      ) : (
-        <div className="card" style={{ padding: '60px', textAlign: 'center', color: '#6b7a9a' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📁</div>
-          <div style={{ fontSize: '18px', fontWeight: '600' }}>{t('noDocuments')}</div>
+        ))}
+      </div>
+
+      {/* Document Detail Modal */}
+      {selectedDoc && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setSelectedDoc(null)}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '600px', width: '90%', maxHeight: '80vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#1e3a6e' }}>{selectedDoc.name}</h3>
+              <button onClick={() => setSelectedDoc(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+              {[
+                { label: 'סוג', value: selectedDoc.type },
+                { label: 'גודל', value: `${(selectedDoc.size / 1024 / 1024).toFixed(2)} MB` },
+                { label: 'תאריך העלאה', value: selectedDoc.uploadDate },
+                { label: 'סטטוס', value: statusLabels[selectedDoc.status] },
+              ].map(item => (
+                <div key={item.label} style={{ padding: '10px', background: '#f0f6ff', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{item.label}</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e3a6e' }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+            {selectedDoc.aiAnalysis && (
+              <div style={{ padding: '16px', background: '#fdf6e3', borderRadius: '12px', marginBottom: '16px' }}>
+                <h4 style={{ fontWeight: '700', color: '#1e3a6e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🤖 {t('aiAnalysis')}
+                  <span style={{ fontSize: '11px', color: '#c9a227', fontWeight: '600' }}>
+                    ({(selectedDoc.aiAnalysis.confidence * 100).toFixed(0)}% ביטחון)
+                  </span>
+                </h4>
+                <p style={{ fontSize: '14px', color: '#1e3a6e', marginBottom: '12px' }}>{selectedDoc.aiAnalysis.summary}</p>
+                {selectedDoc.aiAnalysis.recommendations.map((rec, i) => (
+                  <div key={i} style={{ fontSize: '13px', color: '#856404', padding: '4px 0', display: 'flex', gap: '6px' }}>
+                    <span>💡</span> {rec}
+                  </div>
+                ))}
+              </div>
+            )}
+            {selectedDoc.signatureData && (
+              <div style={{ padding: '16px', background: '#e8f5e9', borderRadius: '12px' }}>
+                <h4 style={{ fontWeight: '700', color: '#2e7d32', marginBottom: '8px' }}>✅ חתימה דיגיטלית</h4>
+                <div style={{ fontSize: '13px', color: '#1e3a6e' }}>
+                  נחתם ב: {selectedDoc.signatureData.signedAt}
+                  {selectedDoc.signatureData.verified && ' • ✅ מאומת'}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

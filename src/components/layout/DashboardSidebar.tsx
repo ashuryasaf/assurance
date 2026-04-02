@@ -1,171 +1,166 @@
 'use client';
 
-import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { ROLE_LABELS_HE, hasPermission } from '@/lib/types';
 
 interface NavItem {
   key: string;
   href: string;
   icon: string;
+  requiredRole?: string;
 }
 
 const navItems: NavItem[] = [
   { key: 'dashboard', href: '/dashboard', icon: '🏠' },
   { key: 'policies', href: '/dashboard/policies', icon: '📋' },
-  { key: 'documents', href: '/dashboard/documents', icon: '��' },
+  { key: 'documents', href: '/dashboard/documents', icon: '📁' },
+  { key: 'regulatory', href: '/dashboard/regulatory', icon: '🏛️' },
+  { key: 'investments', href: '/dashboard/investments', icon: '📈' },
   { key: 'marketplace', href: '/dashboard/marketplace', icon: '🛒' },
   { key: 'reports', href: '/dashboard/reports', icon: '📊' },
   { key: 'esign', href: '/dashboard/esign', icon: '✍️' },
+  { key: 'ai_assistant', href: '/dashboard/ai-assistant', icon: '🤖' },
+  { key: 'agency', href: '/dashboard/agency', icon: '🏢', requiredRole: 'agent' },
+  { key: 'affiliates', href: '/dashboard/affiliates', icon: '🤝', requiredRole: 'agent' },
+  { key: 'banking', href: '/dashboard/banking', icon: '🏦' },
+  { key: 'recordings', href: '/dashboard/recordings', icon: '🎙️' },
+  { key: 'architecture', href: '/dashboard/architecture', icon: '🔧' },
   { key: 'profile', href: '/dashboard/profile', icon: '👤' },
 ];
 
-function SidebarContent({ onClose }: { onClose?: () => void }) {
-  const { t } = useLanguage();
+export default function DashboardSidebar() {
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  return (
+  const filteredNav = navItems.filter(item => {
+    if (!item.requiredRole) return true;
+    if (!user) return false;
+    return hasPermission(user.role, item.requiredRole as never);
+  });
+
+  const roleLabel = user ? ROLE_LABELS_HE[user.role] : '';
+
+  const sidebarContent = (
     <div style={{
-      width: '240px',
-      minHeight: '100vh',
-      background: 'linear-gradient(180deg, #0f2244 0%, #1e3a6e 60%, #1a3060 100%)',
-      display: 'flex',
-      flexDirection: 'column',
+      display: 'flex', flexDirection: 'column', height: '100%',
+      background: 'linear-gradient(180deg, #0a1628 0%, #1a3060 100%)',
     }}>
-      {/* Logo */}
-      <div style={{
-        padding: '24px 20px',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        textAlign: 'center',
-      }}>
-        <div style={{ fontSize: '28px', marginBottom: '4px' }}>🛡️</div>
-        <div style={{ color: 'white', fontWeight: '800', fontSize: '16px' }}>אשורי</div>
-        <div style={{ color: '#93b8ea', fontSize: '11px', marginTop: '2px' }}>סוכנות לביטוח</div>
+      <div style={{ padding: '20px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '28px' }}>🛡️</span>
+          <div>
+            <div style={{ color: 'white', fontWeight: '800', fontSize: '18px' }}>Assurance</div>
+            <div style={{ color: '#c9a227', fontSize: '11px', fontWeight: '600' }}>סוכנות ביטוח דיגיטלית</div>
+          </div>
+        </Link>
       </div>
 
-      {/* User info */}
-      <div style={{
-        padding: '16px 20px',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-      }}>
+      {user && (
         <div style={{
-          width: '40px', height: '40px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #c9a227, #a87c1a)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontWeight: '700', fontSize: '16px', flexShrink: 0,
+          padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+          display: 'flex', alignItems: 'center', gap: '10px',
         }}>
-          {user?.firstName?.[0] || 'U'}
-        </div>
-        <div style={{ overflow: 'hidden' }}>
-          <div style={{ color: 'white', fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {user?.firstName} {user?.lastName}
+          <div style={{
+            width: '40px', height: '40px', borderRadius: '50%',
+            background: 'linear-gradient(135deg, #c9a227, #a87c1a)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'white', fontWeight: '700', fontSize: '16px',
+          }}>
+            {user.firstName[0]}
           </div>
-          <div style={{ color: '#93b8ea', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {user?.email}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: 'white', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user.firstName} {user.lastName}
+            </div>
+            <div style={{
+              display: 'inline-block', padding: '2px 8px', borderRadius: '10px', fontSize: '10px',
+              fontWeight: '700', background: 'rgba(201,162,39,0.2)', color: '#d4b44a',
+            }}>
+              {roleLabel}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Navigation */}
-      <nav style={{ flex: 1, padding: '12px' }}>
-        {navItems.map(item => {
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+        {filteredNav.map(item => {
           const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
           return (
             <Link
               key={item.key}
               href={item.href}
-              className={`nav-item ${isActive ? 'active' : ''}`}
-              onClick={onClose}
-              style={{ marginBottom: '2px', textDecoration: 'none' }}
+              onClick={() => setMobileOpen(false)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '10px 12px', borderRadius: '10px', marginBottom: '2px',
+                textDecoration: 'none', fontSize: '13px', fontWeight: isActive ? '700' : '500',
+                background: isActive ? 'rgba(201,162,39,0.15)' : 'transparent',
+                color: isActive ? '#d4b44a' : 'rgba(255,255,255,0.7)',
+                transition: 'all 0.15s',
+              }}
             >
-              <span style={{ fontSize: '18px' }}>{item.icon}</span>
+              <span style={{ fontSize: '16px', width: '24px', textAlign: 'center' }}>{item.icon}</span>
               <span>{t(item.key)}</span>
             </Link>
           );
         })}
       </nav>
 
-      {/* Bottom */}
-      <div style={{ padding: '12px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ padding: '8px 12px', marginBottom: '6px' }}>
-          <LanguageSwitcher />
-        </div>
+      <div style={{ padding: '12px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <LanguageSwitcher variant="compact" />
         <button
-          onClick={() => { logout(); }}
-          className="nav-item"
-          style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}
+          onClick={logout}
+          style={{
+            width: '100%', marginTop: '8px', padding: '10px',
+            background: 'rgba(255,59,48,0.15)', border: 'none', borderRadius: '10px',
+            color: '#ff6b6b', fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+          }}
         >
-          <span style={{ fontSize: '18px' }}>🚪</span>
-          <span>{t('logout')}</span>
+          🚪 {t('logout')}
         </button>
       </div>
     </div>
   );
-}
-
-export function DashboardSidebar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { isRtl } = useLanguage();
 
   return (
     <>
-      <style>{`
-        .sidebar-desktop { display: flex; }
-        .mobile-toggle { display: none; }
-        @media (max-width: 768px) {
-          .sidebar-desktop { display: none !important; }
-          .mobile-toggle { display: flex !important; }
-        }
-      `}</style>
-
-      {/* Desktop sidebar */}
-      <div className="sidebar-desktop no-print">
-        <SidebarContent />
-      </div>
-
-      {/* Mobile toggle button */}
       <button
-        className="mobile-toggle no-print"
         onClick={() => setMobileOpen(true)}
         style={{
-          position: 'fixed',
-          top: '12px',
-          [isRtl ? 'right' : 'left']: '12px',
-          zIndex: 1001,
-          background: '#1e3a6e',
-          border: 'none',
-          borderRadius: '8px',
-          padding: '10px',
-          cursor: 'pointer',
-          color: 'white',
-          fontSize: '20px',
-          alignItems: 'center',
-          justifyContent: 'center',
+          display: 'none', position: 'fixed', top: '12px', insetInlineStart: '12px',
+          zIndex: 200, background: '#1e3a6e', color: 'white', border: 'none',
+          borderRadius: '10px', padding: '10px 14px', fontSize: '20px', cursor: 'pointer',
         }}
+        className="mobile-menu-btn"
       >
         ☰
       </button>
 
-      {/* Mobile overlay */}
+      <aside style={{
+        width: '260px', minHeight: '100vh', flexShrink: 0,
+      }} className="desktop-sidebar">
+        {sidebarContent}
+      </aside>
+
       {mobileOpen && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-          }}
-          onClick={() => setMobileOpen(false)}
-        >
-          <div onClick={e => e.stopPropagation()}>
-            <SidebarContent onClose={() => setMobileOpen(false)} />
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 300,
+          display: 'flex',
+        }}>
+          <div
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setMobileOpen(false)}
+          />
+          <div style={{ position: 'relative', width: '280px', height: '100%' }}>
+            {sidebarContent}
           </div>
         </div>
       )}

@@ -4,9 +4,9 @@ import { LanguageProvider } from '@/contexts/LanguageContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 
 export const metadata: Metadata = {
-  title: 'אשורי סוכנות לביטוח',
-  description: 'פורטל לקוחות אשורי - ניהול ביטוחים, פנסיה והשקעות',
-  keywords: 'ביטוח, פנסיה, השקעות, הר הביטוח, הר הכסף, מסלקה פנסיונית',
+  title: 'Assurance - סוכנות ביטוח דיגיטלית מתקדמת',
+  description: 'פורטל ביטוח דיגיטלי מתקדם - ניהול ביטוחים, פנסיה, השקעות, מסלקה פנסיונית, הר הביטוח, גמל נט',
+  keywords: 'ביטוח, פנסיה, השקעות, הר הביטוח, מסלקה פנסיונית, גמל נט, סוכן ביטוח, assurance',
 };
 
 export default function RootLayout({
@@ -16,13 +16,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="he" dir="rtl">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
       <body>
         <AuthProvider>
           <LanguageProvider>

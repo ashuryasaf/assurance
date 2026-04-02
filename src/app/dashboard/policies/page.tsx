@@ -1,203 +1,142 @@
 'use client';
 
-import { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockPolicies, Policy } from '@/lib/mockData';
-
-const typeColors: Record<string, { bg: string; color: string; icon: string }> = {
-  life: { bg: '#f0f6ff', color: '#1e3a6e', icon: '💙' },
-  health: { bg: '#f0fdf4', color: '#16a34a', icon: '💚' },
-  car: { bg: '#fff7ed', color: '#d97706', icon: '🚗' },
-  home: { bg: '#fdf4ff', color: '#9333ea', icon: '🏠' },
-  pension: { bg: '#fffbeb', color: '#a16207', icon: '🏦' },
-  investment: { bg: '#f0fdf4', color: '#059669', icon: '📈' },
-  travel: { bg: '#fff0f0', color: '#dc2626', icon: '✈️' },
-  business: { bg: '#f5f0ff', color: '#7c3aed', icon: '💼' },
-  critical: { bg: '#fff5f5', color: '#dc2626', icon: '❤️' },
-};
-
-function PolicyCard({ policy, t, typeLabel }: { policy: Policy; t: (k: string) => string; typeLabel: string }) {
-  const meta = typeColors[policy.type] || { bg: '#f5f7fc', color: '#1e3a6e', icon: '📋' };
-  const totalMonthly = mockPolicies.filter(p => p.status === 'active').reduce((sum, p) => sum + p.monthlyPremium, 0);
-
-  return (
-    <div className="card" style={{ padding: '20px', transition: 'transform 0.2s, box-shadow 0.2s' }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
-        (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(30,58,110,0.1)';
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.transform = 'none';
-        (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(10,22,40,0.06)';
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '42px', height: '42px',
-            background: meta.bg,
-            borderRadius: '10px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '20px',
-          }}>
-            {meta.icon}
-          </div>
-          <div>
-            <div style={{ fontWeight: '700', color: '#1a2744', fontSize: '15px' }}>{typeLabel}</div>
-            <div style={{ fontSize: '12px', color: '#6b7a9a' }}>{policy.insurer}</div>
-          </div>
-        </div>
-        <span className={`badge-${policy.status}`}>{t(policy.status)}</span>
-      </div>
-
-      <div style={{ fontSize: '12px', color: '#6b7a9a', marginBottom: '6px' }}>{t('policyNumber')}: <strong style={{ color: '#1a2744' }}>{policy.policyNumber}</strong></div>
-      <div style={{ fontSize: '12px', color: '#6b7a9a', marginBottom: '14px' }}>{t('coverage')}: <strong style={{ color: '#1a2744' }}>{policy.coverage}</strong></div>
-
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        background: '#f8faff', borderRadius: '8px', padding: '10px 14px',
-        marginBottom: '14px',
-      }}>
-        <div>
-          <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{t('monthlyPremium')}</div>
-          <div style={{ fontSize: '20px', fontWeight: '800', color: '#1e3a6e' }}>{policy.monthlyPremium.toLocaleString()} ₪</div>
-        </div>
-        <div style={{ textAlign: 'end' }}>
-          <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{t('renewalDate')}</div>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#1a2744' }}>
-            {new Date(policy.renewalDate).toLocaleDateString('he-IL')}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button style={{
-          flex: 1, padding: '8px', background: '#f0f6ff', border: '1px solid #c8dbf0',
-          borderRadius: '8px', cursor: 'pointer', fontSize: '12px', color: '#1e3a6e', fontWeight: '600',
-        }}>
-          👁️ {t('viewPolicy')}
-        </button>
-        <button style={{
-          flex: 1, padding: '8px', background: '#1e3a6e', border: 'none',
-          borderRadius: '8px', cursor: 'pointer', fontSize: '12px', color: 'white', fontWeight: '600',
-        }}>
-          📋 {t('claimPolicy')}
-        </button>
-      </div>
-    </div>
-  );
-}
+import { mockPolicies } from '@/lib/mockData';
+import { useState } from 'react';
 
 export default function PoliciesPage() {
   const { t } = useLanguage();
-  const [activeFilter, setActiveFilter] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
 
-  const types = ['all', 'life', 'health', 'car', 'home', 'pension', 'travel'];
   const typeLabels: Record<string, string> = {
-    all: t('all'),
-    life: t('lifeInsurance'),
-    health: t('healthInsurance'),
-    car: t('carInsurance'),
-    home: t('homeInsurance'),
-    pension: t('pension'),
-    travel: t('travelInsurance'),
-    critical: t('criticalIllness'),
-    business: t('businessInsurance'),
-    investment: t('investments'),
+    life: 'חיים', health: 'בריאות', car: 'רכב', home: 'דירה',
+    pension: 'פנסיה', travel: 'נסיעות', business: 'עסק',
+    investment: 'השקעות', gemel: 'גמל', kranot: 'קרנות',
   };
 
-  const getPolicyTypeLabel = (type: string) => {
-    return typeLabels[type] || type;
+  const typeIcons: Record<string, string> = {
+    life: '❤️', health: '🏥', car: '🚗', home: '🏠',
+    pension: '🏦', travel: '✈️', business: '🏢',
+    investment: '📈', gemel: '💼', kranot: '📊',
+  };
+
+  const typeColors: Record<string, string> = {
+    life: '#e91e63', health: '#4caf50', car: '#2196f3', home: '#ff9800',
+    pension: '#9c27b0', travel: '#00bcd4', business: '#795548',
+    investment: '#607d8b', gemel: '#ff5722', kranot: '#3f51b5',
   };
 
   const filtered = mockPolicies.filter(p => {
-    const matchType = activeFilter === 'all' || p.type === activeFilter;
-    const matchSearch = !searchTerm || p.policyNumber.includes(searchTerm) || p.insurer.includes(searchTerm);
-    return matchType && matchSearch;
+    const matchSearch = !search || p.policyNumber.toLowerCase().includes(search.toLowerCase()) ||
+      p.provider.includes(search) || typeLabels[p.type]?.includes(search);
+    const matchType = typeFilter === 'all' || p.type === typeFilter;
+    return matchSearch && matchType;
   });
 
-  const totalMonthly = mockPolicies.filter(p => p.status === 'active').reduce((sum, p) => sum + p.monthlyPremium, 0);
+  const totalPremium = filtered.reduce((s, p) => s + p.premium, 0);
 
   return (
-    <div className="animate-fadeIn">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#1e3a6e' }}>{t('myPolicies')}</h1>
-          <p style={{ color: '#6b7a9a', fontSize: '14px', marginTop: '4px' }}>
-            {t('totalPolicies')}: {mockPolicies.length} | {t('monthlyPremium')}: {totalMonthly.toLocaleString()} ₪
-          </p>
+    <div className="animate-fadeIn" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '28px', fontWeight: '800', color: '#1e3a6e', marginBottom: '24px' }}>
+        📋 {t('policyManagement')}
+      </h1>
+
+      {/* Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+        <div className="card" style={{ padding: '18px', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', borderRadius: '14px' }}>
+          <div style={{ fontSize: '12px', opacity: 0.8 }}>{t('totalPolicies')}</div>
+          <div style={{ fontSize: '28px', fontWeight: '800' }}>{mockPolicies.length}</div>
         </div>
-        <a
-          href="https://www.gov.il/he/departments/insurance-supervision"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '8px',
-            padding: '10px 20px',
-            background: 'linear-gradient(135deg, #1e3a6e, #2451a0)',
-            color: 'white', borderRadius: '10px', textDecoration: 'none',
-            fontSize: '14px', fontWeight: '600',
-          }}
-        >
-          🏔️ {t('connectHarBituach')}
-        </a>
+        <div className="card" style={{ padding: '18px', background: 'linear-gradient(135deg, #c9a227, #a87c1a)', color: 'white', borderRadius: '14px' }}>
+          <div style={{ fontSize: '12px', opacity: 0.8 }}>{t('monthlyPremium')}</div>
+          <div style={{ fontSize: '28px', fontWeight: '800' }}>₪{totalPremium.toLocaleString()}</div>
+        </div>
+        <div className="card" style={{ padding: '18px', background: 'linear-gradient(135deg, #1a8c5a, #22c55e)', color: 'white', borderRadius: '14px' }}>
+          <div style={{ fontSize: '12px', opacity: 0.8 }}>{t('activePolicies')}</div>
+          <div style={{ fontSize: '28px', fontWeight: '800' }}>{mockPolicies.filter(p => p.status === 'active').length}</div>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div style={{
-        display: 'flex', gap: '10px', marginBottom: '20px',
-        flexWrap: 'wrap', alignItems: 'center',
-      }}>
-        <div style={{ flex: 1, minWidth: '200px' }}>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder={`🔍 ${t('search')}...`}
-            className="input-field"
-            style={{ fontSize: '14px' }}
-          />
-        </div>
+      {/* Search & Filters */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder={t('search')}
+          style={{ flex: 1, minWidth: '200px', padding: '10px 16px', borderRadius: '10px', border: '1.5px solid #dae8f8', fontSize: '14px', outline: 'none' }}
+        />
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {types.map(type => (
-            <button
-              key={type}
-              onClick={() => setActiveFilter(type)}
-              style={{
-                padding: '7px 14px',
-                borderRadius: '20px',
-                border: '1.5px solid',
-                borderColor: activeFilter === type ? '#1e3a6e' : '#d1dce8',
-                background: activeFilter === type ? '#1e3a6e' : 'white',
-                color: activeFilter === type ? 'white' : '#6b7a9a',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '600',
-                transition: 'all 0.2s',
-              }}
-            >
-              {typeLabels[type]}
-            </button>
+          <button onClick={() => setTypeFilter('all')} style={{
+            padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+            background: typeFilter === 'all' ? '#1e3a6e' : '#f0f6ff', color: typeFilter === 'all' ? 'white' : '#1e3a6e',
+          }}>הכל</button>
+          {Object.entries(typeLabels).map(([key, label]) => (
+            <button key={key} onClick={() => setTypeFilter(key)} style={{
+              padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+              background: typeFilter === key ? typeColors[key] : '#f0f6ff', color: typeFilter === key ? 'white' : '#1e3a6e',
+            }}>{typeIcons[key]} {label}</button>
           ))}
         </div>
       </div>
 
-      {/* Policies grid */}
-      {filtered.length > 0 ? (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: '16px',
-        }}>
-          {filtered.map(p => <PolicyCard key={p.id} policy={p} t={t} typeLabel={getPolicyTypeLabel(p.type)} />)}
-        </div>
-      ) : (
-        <div className="card" style={{ padding: '60px', textAlign: 'center', color: '#6b7a9a' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
-          <div style={{ fontSize: '18px', fontWeight: '600' }}>{t('noPolicies')}</div>
-        </div>
-      )}
+      {/* Policies Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
+        {filtered.map(policy => (
+          <div key={policy.id} className="card" style={{ padding: '18px', cursor: 'pointer', transition: 'transform 0.15s' }}
+            onClick={() => setSelectedPolicy(selectedPolicy === policy.id ? null : policy.id)}
+            onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
+            onMouseLeave={e => (e.currentTarget.style.transform = 'none')}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '12px',
+                  background: `${typeColors[policy.type]}15`, color: typeColors[policy.type],
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px',
+                }}>
+                  {typeIcons[policy.type]}
+                </div>
+                <div>
+                  <div style={{ fontWeight: '700', fontSize: '15px', color: '#1e3a6e' }}>{typeLabels[policy.type]}</div>
+                  <div style={{ fontSize: '12px', color: '#6b7a9a' }}>{policy.provider} • {policy.policyNumber}</div>
+                </div>
+              </div>
+              <span style={{
+                padding: '3px 10px', borderRadius: '8px', fontSize: '10px', fontWeight: '700',
+                background: policy.status === 'active' ? '#e8f5e9' : '#fce4ec',
+                color: policy.status === 'active' ? '#2e7d32' : '#c62828',
+              }}>
+                {policy.status === 'active' ? t('active') : t('expired')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div>
+                <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{t('premium')}</div>
+                <div style={{ fontWeight: '700', color: '#1e3a6e' }}>₪{policy.premium}/חודש</div>
+              </div>
+              <div style={{ textAlign: 'end' }}>
+                <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{t('coverage')}</div>
+                <div style={{ fontWeight: '700', color: '#1e3a6e' }}>₪{policy.coverageAmount.toLocaleString()}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: '11px', color: '#6b7a9a' }}>
+              {policy.startDate} → {policy.endDate}
+            </div>
+
+            {selectedPolicy === policy.id && (
+              <div style={{ marginTop: '12px', padding: '12px', background: '#f0f6ff', borderRadius: '10px' }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e3a6e', marginBottom: '8px' }}>פרטים נוספים:</div>
+                {Object.entries(policy.details).map(([key, val]) => (
+                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '3px 0' }}>
+                    <span style={{ color: '#6b7a9a' }}>{key}</span>
+                    <span style={{ fontWeight: '600', color: '#1e3a6e' }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -13,15 +13,17 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('he');
+function getInitialLanguage(): Language {
+  if (typeof window === 'undefined') return 'he';
+  const saved = localStorage.getItem('language') as Language;
+  if (saved && ['he', 'en', 'ru', 'fr', 'ar'].includes(saved)) {
+    return saved;
+  }
+  return 'he';
+}
 
-  useEffect(() => {
-    const saved = localStorage.getItem('language') as Language;
-    if (saved && ['he', 'en', 'ru', 'fr', 'ar'].includes(saved)) {
-      setLanguageState(saved);
-    }
-  }, []);
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const [language, setLanguageState] = useState<Language>(getInitialLanguage);
 
   useEffect(() => {
     const rtl = isRTL(language);
