@@ -1,3 +1,5 @@
+[phases.setup]
+
 [phases.install]
 cmds = ["npm ci"]
 
@@ -8,7 +10,7 @@ cmds = ["npm run build"]
 cmd = "node .next/standalone/server.js"
 
 [variables]
+NIXPACKS_NODE_VERSION = "20"
 NODE_ENV = "production"
 PORT = "3000"
 HOSTNAME = "0.0.0.0"
-NIXPACKS_NODE_VERSION = "20"
