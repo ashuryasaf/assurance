@@ -1,27 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import type { User, UserRole } from '@/lib/types';
+import { hasPermission } from '@/lib/types';
+import { mockUsers } from '@/lib/mockData';
 
-export interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  idNumber: string;
-  role: 'client' | 'agent' | 'admin';
-  avatar?: string;
-}
-
-interface AuthContextType {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (data: RegisterData) => Promise<boolean>;
-  loginWithInvite: (token: string, data: RegisterData) => Promise<boolean>;
-  logout: () => void;
-}
+export type { User };
 
 export interface RegisterData {
   email: string;
@@ -32,75 +16,68 @@ export interface RegisterData {
   idNumber: string;
 }
 
+interface AuthContextType {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (data: RegisterData) => Promise<boolean>;
+  loginWithInvite: (token: string, data: RegisterData) => Promise<boolean>;
+  logout: () => void;
+  canAccess: (requiredRole: UserRole) => boolean;
+  allUsers: User[];
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Demo users for the prototype
-const DEMO_USERS: User[] = [
-  {
-    id: '1',
-    email: 'demo@ashuri.co.il',
-    firstName: 'ישראל',
-    lastName: 'ישראלי',
-    phone: '052-1234567',
-    idNumber: '123456789',
-    role: 'client',
-  },
-  {
-    id: '2',
-    email: 'agent@ashuri.co.il',
-    firstName: 'שרה',
-    lastName: 'כהן',
-    phone: '050-9876543',
-    idNumber: '987654321',
-    role: 'agent',
-  },
-];
+const DEMO_PASSWORD = 'Demo1234!';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for saved session
-    const savedUser = localStorage.getItem('ashuri_user');
+    const savedUser = localStorage.getItem('assurance_user');
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
       } catch {
-        localStorage.removeItem('ashuri_user');
+        localStorage.removeItem('assurance_user');
       }
     }
     setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Demo authentication - in production this would call an API
-    const demoUser = DEMO_USERS.find(u => u.email === email);
-    if (demoUser && password === 'Demo1234!') {
-      setUser(demoUser);
-      localStorage.setItem('ashuri_user', JSON.stringify(demoUser));
+    const demoUser = mockUsers.find(u => u.email === email);
+    if (demoUser && password === DEMO_PASSWORD) {
+      const updated = { ...demoUser, lastLogin: new Date().toISOString() };
+      setUser(updated);
+      localStorage.setItem('assurance_user', JSON.stringify(updated));
       return true;
     }
-    // Allow any email with Demo1234! password for demo purposes
-    if (password === 'Demo1234!' && email.includes('@')) {
+    if (password === DEMO_PASSWORD && email.includes('@')) {
       const newUser: User = {
         id: Date.now().toString(),
         email,
         firstName: 'לקוח',
-        lastName: 'דמו',
+        lastName: 'חדש',
         phone: '050-0000000',
         idNumber: '000000000',
         role: 'client',
+        permissions: ['view_own'],
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true,
       };
       setUser(newUser);
-      localStorage.setItem('ashuri_user', JSON.stringify(newUser));
+      localStorage.setItem('assurance_user', JSON.stringify(newUser));
       return true;
     }
     return false;
   };
 
   const register = async (data: RegisterData): Promise<boolean> => {
-    // Demo registration
     const newUser: User = {
       id: Date.now().toString(),
       email: data.email,
@@ -109,14 +86,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       phone: data.phone,
       idNumber: data.idNumber,
       role: 'client',
+      permissions: ['view_own'],
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
+      isActive: true,
     };
     setUser(newUser);
-    localStorage.setItem('ashuri_user', JSON.stringify(newUser));
+    localStorage.setItem('assurance_user', JSON.stringify(newUser));
     return true;
   };
 
   const loginWithInvite = async (token: string, data: RegisterData): Promise<boolean> => {
-    // Demo invite registration - token validation would be server-side in production
     if (token && token.length > 8) {
       return register(data);
     }
@@ -125,7 +105,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('ashuri_user');
+    localStorage.removeItem('assurance_user');
+  };
+
+  const canAccess = (requiredRole: UserRole): boolean => {
+    if (!user) return false;
+    return hasPermission(user.role, requiredRole);
   };
 
   return (
@@ -137,6 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       loginWithInvite,
       logout,
+      canAccess,
+      allUsers: mockUsers,
     }}>
       {children}
     </AuthContext.Provider>

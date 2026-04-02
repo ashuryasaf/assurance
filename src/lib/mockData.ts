@@ -1,387 +1,396 @@
-export interface Policy {
-  id: string;
-  policyNumber: string;
-  type: 'life' | 'health' | 'car' | 'home' | 'pension' | 'investment' | 'travel' | 'business' | 'critical';
-  insurer: string;
-  monthlyPremium: number;
-  coverage: string;
-  startDate: string;
-  endDate: string;
-  renewalDate: string;
-  status: 'active' | 'pending' | 'expired';
-  description?: string;
-}
+import type {
+  User, Agency, Policy, Document, Report, RegulatoryReport,
+  Affiliate, BankConnection, InvestmentPortfolio, AIMessage,
+  MaslakaData, HarBituachData, GamalNetData, Recording
+} from './types';
 
-export interface Document {
-  id: string;
-  name: string;
-  type: 'policy' | 'claim' | 'invoice' | 'report' | 'identification' | 'other';
-  size: string;
-  uploadDate: string;
-  relatedPolicyId?: string;
-  relatedPolicyNumber?: string;
-  url?: string;
-  requiresSignature?: boolean;
-  signed?: boolean;
-  signedDate?: string;
-}
+export const mockUsers: User[] = [
+  {
+    id: '1', email: 'admin@assurance.co.il', firstName: 'אבי', lastName: 'כהן',
+    phone: '052-1234567', idNumber: '123456789', role: 'super_admin',
+    permissions: ['all'], createdAt: '2024-01-01', isActive: true, licenseNumber: 'INS-001',
+    specializations: ['חיים', 'בריאות', 'פנסיה'],
+  },
+  {
+    id: '2', email: 'agent@assurance.co.il', firstName: 'שרה', lastName: 'לוי',
+    phone: '050-9876543', idNumber: '987654321', role: 'agent', agencyId: 'ag1',
+    permissions: ['manage_clients', 'view_reports', 'manage_policies'], createdAt: '2024-02-01',
+    isActive: true, licenseNumber: 'INS-045', specializations: ['רכב', 'דירה'],
+  },
+  {
+    id: '3', email: 'sub@assurance.co.il', firstName: 'דוד', lastName: 'מזרחי',
+    phone: '053-5555555', idNumber: '555555555', role: 'sub_agent', agencyId: 'ag1', parentAgentId: '2',
+    permissions: ['view_clients', 'view_policies'], createdAt: '2024-03-01', isActive: true,
+  },
+  {
+    id: '4', email: 'demo@assurance.co.il', firstName: 'ישראל', lastName: 'ישראלי',
+    phone: '054-1112222', idNumber: '111222333', role: 'client',
+    permissions: ['view_own'], createdAt: '2024-04-01', isActive: true,
+  },
+  {
+    id: '5', email: 'agency@assurance.co.il', firstName: 'רחל', lastName: 'גולד',
+    phone: '058-7778888', idNumber: '777888999', role: 'agency_owner', agencyId: 'ag1',
+    permissions: ['manage_agency', 'manage_agents', 'manage_clients', 'view_reports'],
+    createdAt: '2024-01-15', isActive: true, licenseNumber: 'INS-002',
+  },
+];
 
-export interface InsuranceProduct {
-  id: string;
-  type: 'life' | 'health' | 'car' | 'home' | 'pension' | 'travel' | 'critical';
-  name: string;
-  nameEn: string;
-  description: string;
-  monthlyPriceFrom: number;
-  features: string[];
-  isRecommended?: boolean;
-  isBestValue?: boolean;
-  insurer: string;
-  logo?: string;
-}
+export const mockAgencies: Agency[] = [
+  {
+    id: 'ag1', name: 'אשורנס - סוכנות ראשית', licenseNumber: 'AGN-2024-001',
+    ownerId: '5', address: 'רח\' הרצל 50, תל אביב', phone: '03-1234567',
+    email: 'service@assurance.co.il', isActive: true, createdAt: '2024-01-01',
+    regulatoryStatus: 'active',
+    subAgencies: [
+      {
+        id: 'ag2', name: 'אשורנס צפון', licenseNumber: 'AGN-2024-002',
+        parentAgencyId: 'ag1', ownerId: '2', address: 'רח\' העצמאות 12, חיפה',
+        phone: '04-1234567', email: 'north@assurance.co.il', isActive: true,
+        createdAt: '2024-02-01', regulatoryStatus: 'active',
+      },
+      {
+        id: 'ag3', name: 'אשורנס דרום', licenseNumber: 'AGN-2024-003',
+        parentAgencyId: 'ag1', ownerId: '3', address: 'שד\' רגר 10, באר שבע',
+        phone: '08-1234567', email: 'south@assurance.co.il', isActive: true,
+        createdAt: '2024-03-01', regulatoryStatus: 'active',
+      },
+    ],
+  },
+];
 
-export interface ActivityItem {
-  id: string;
-  type: 'policy_added' | 'document_uploaded' | 'claim_filed' | 'renewal' | 'payment' | 'signed';
-  title: string;
-  description: string;
-  date: string;
-  icon: string;
-}
-
-export interface Report {
-  id: string;
-  title: string;
-  type: 'annual' | 'policy' | 'claims' | 'pension' | 'investment';
-  year: number;
-  createdDate: string;
-  size: string;
-}
-
-// Mock policies data
 export const mockPolicies: Policy[] = [
   {
-    id: '1',
-    policyNumber: 'BIT-2024-001234',
-    type: 'life',
-    insurer: 'מנורה מבטחים',
-    monthlyPremium: 450,
-    coverage: '1,000,000 ₪',
-    startDate: '2022-01-01',
-    endDate: '2032-01-01',
-    renewalDate: '2025-01-01',
-    status: 'active',
-    description: 'ביטוח חיים ריסק',
+    id: 'p1', policyNumber: 'POL-2024-001', type: 'life', provider: 'מגדל', status: 'active',
+    premium: 450, premiumFrequency: 'monthly', startDate: '2024-01-01', endDate: '2054-01-01',
+    coverageAmount: 1000000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-12-01',
+    details: { beneficiary: 'משפחה', coverageType: 'ריסק + חיסכון' },
   },
   {
-    id: '2',
-    policyNumber: 'BIT-2024-005678',
-    type: 'health',
-    insurer: 'כלל ביטוח',
-    monthlyPremium: 280,
-    coverage: 'כיסוי בריאות מורחב',
-    startDate: '2023-03-15',
-    endDate: '2025-03-15',
-    renewalDate: '2025-03-15',
-    status: 'active',
-    description: 'ביטוח בריאות משלים',
+    id: 'p2', policyNumber: 'POL-2024-002', type: 'health', provider: 'הראל', status: 'active',
+    premium: 380, premiumFrequency: 'monthly', startDate: '2024-03-01', endDate: '2025-03-01',
+    coverageAmount: 500000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-12-01',
+    details: { plan: 'פלטינום', dental: 'כלול' },
   },
   {
-    id: '3',
-    policyNumber: 'RKV-2024-009012',
-    type: 'car',
-    insurer: 'הראל ביטוח',
-    monthlyPremium: 320,
-    coverage: 'ביטוח מקיף',
-    startDate: '2024-06-01',
-    endDate: '2025-06-01',
-    renewalDate: '2025-06-01',
-    status: 'active',
-    description: 'ביטוח רכב מקיף - טויוטה קורולה 2022',
+    id: 'p3', policyNumber: 'POL-2024-003', type: 'car', provider: 'כלל', status: 'active',
+    premium: 320, premiumFrequency: 'monthly', startDate: '2024-06-01', endDate: '2025-06-01',
+    coverageAmount: 250000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-11-01',
+    details: { vehicle: 'טויוטה קורולה 2023', coverage: 'מקיף' },
   },
   {
-    id: '4',
-    policyNumber: 'DIR-2023-003456',
-    type: 'home',
-    insurer: 'מגדל ביטוח',
-    monthlyPremium: 180,
-    coverage: 'מבנה ותכולה 2,500,000 ₪',
-    startDate: '2021-08-01',
-    endDate: '2025-08-01',
-    renewalDate: '2025-08-01',
-    status: 'active',
-    description: 'ביטוח דירה - מבנה ותכולה',
+    id: 'p4', policyNumber: 'POL-2024-004', type: 'home', provider: 'הפניקס', status: 'active',
+    premium: 180, premiumFrequency: 'monthly', startDate: '2024-02-01', endDate: '2025-02-01',
+    coverageAmount: 2500000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-10-01',
+    details: { propertyType: 'דירה', area: '120 מ"ר' },
   },
   {
-    id: '5',
-    policyNumber: 'PEN-2024-007890',
-    type: 'pension',
-    insurer: 'מיטב דש פנסיה',
-    monthlyPremium: 1200,
-    coverage: 'קרן פנסיה מקיפה',
-    startDate: '2018-01-01',
-    endDate: '2048-01-01',
-    renewalDate: '2026-01-01',
-    status: 'active',
-    description: 'קרן פנסיה - מסלול כללי',
+    id: 'p5', policyNumber: 'POL-2024-005', type: 'pension', provider: 'מנורה', status: 'active',
+    premium: 1200, premiumFrequency: 'monthly', startDate: '2020-01-01', endDate: '2055-01-01',
+    coverageAmount: 3000000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-12-01',
+    details: { track: 'מסלול כללי', managementFee: '0.5%' },
   },
   {
-    id: '6',
-    policyNumber: 'NSV-2022-001122',
-    type: 'travel',
-    insurer: 'AIG ישראל',
-    monthlyPremium: 45,
-    coverage: 'כיסוי עד $1,000,000',
-    startDate: '2024-07-01',
-    endDate: '2024-07-31',
-    renewalDate: '2025-07-01',
-    status: 'expired',
-    description: 'ביטוח נסיעות לחו"ל - אירופה',
+    id: 'p6', policyNumber: 'POL-2024-006', type: 'investment', provider: 'אלטשולר שחם', status: 'active',
+    premium: 500, premiumFrequency: 'monthly', startDate: '2023-06-01', endDate: '2033-06-01',
+    coverageAmount: 200000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-12-01',
+    details: { fundType: 'גמל להשקעה', riskLevel: 'בינוני' },
+  },
+  {
+    id: 'p7', policyNumber: 'POL-2024-007', type: 'business', provider: 'איילון', status: 'active',
+    premium: 850, premiumFrequency: 'monthly', startDate: '2024-01-01', endDate: '2025-01-01',
+    coverageAmount: 5000000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-11-01',
+    details: { businessType: 'משרד', employees: '15' },
+  },
+  {
+    id: 'p8', policyNumber: 'POL-2024-008', type: 'gemel', provider: 'מיטב דש', status: 'active',
+    premium: 600, premiumFrequency: 'monthly', startDate: '2022-01-01', endDate: '2042-01-01',
+    coverageAmount: 150000, clientId: '4', agentId: '2', documents: [], lastUpdated: '2024-12-01',
+    details: { fundType: 'קרן השתלמות', track: 'מניות' },
   },
 ];
 
-// Mock documents data
 export const mockDocuments: Document[] = [
   {
-    id: '1',
-    name: 'פוליסת ביטוח חיים - מנורה 2024',
-    type: 'policy',
-    size: '1.2 MB',
-    uploadDate: '2024-01-15',
-    relatedPolicyId: '1',
-    relatedPolicyNumber: 'BIT-2024-001234',
-    requiresSignature: false,
-    signed: false,
+    id: 'd1', name: 'פוליסת ביטוח חיים - מגדל.pdf', type: 'policy', mimeType: 'application/pdf',
+    size: 2500000, uploadDate: '2024-12-01', uploadedBy: '2', status: 'processed',
+    clientId: '4', policyId: 'p1', tags: ['חיים', 'מגדל'],
+    aiAnalysis: {
+      summary: 'פוליסת ביטוח חיים מסוג ריסק וחיסכון, כיסוי עד 1,000,000 ₪',
+      extractedData: { premium: '450', coverage: '1000000', beneficiary: 'משפחה' },
+      riskScore: 15, recommendations: ['שקול הגדלת כיסוי בהתאם לגיל'], processedAt: '2024-12-01', confidence: 0.95,
+    },
   },
   {
-    id: '2',
-    name: 'תביעת ביטוח בריאות - ינואר 2024',
-    type: 'claim',
-    size: '850 KB',
-    uploadDate: '2024-02-20',
-    relatedPolicyId: '2',
-    relatedPolicyNumber: 'BIT-2024-005678',
-    requiresSignature: true,
-    signed: false,
+    id: 'd2', name: 'דוח בריאות שנתי.pdf', type: 'medical', mimeType: 'application/pdf',
+    size: 1800000, uploadDate: '2024-11-15', uploadedBy: '4', status: 'processed',
+    clientId: '4', tags: ['רפואי', 'שנתי'],
+    aiAnalysis: {
+      summary: 'דוח בריאות שנתי - תקין, ללא ממצאים חריגים',
+      extractedData: { date: '2024-11-15', doctor: 'ד"ר כהן' },
+      recommendations: ['המשך מעקב שנתי'], processedAt: '2024-11-16', confidence: 0.92,
+    },
   },
   {
-    id: '3',
-    name: 'חשבונית פרמיה - פברואר 2024',
-    type: 'invoice',
-    size: '320 KB',
-    uploadDate: '2024-02-01',
-    requiresSignature: false,
-    signed: false,
+    id: 'd3', name: 'הסכם שירות - חתום.pdf', type: 'agreement', mimeType: 'application/pdf',
+    size: 500000, uploadDate: '2024-10-01', uploadedBy: '2', status: 'signed',
+    clientId: '4', tags: ['הסכם', 'חתום'],
+    signatureData: { signedBy: '4', signedAt: '2024-10-01', verified: true },
   },
   {
-    id: '4',
-    name: 'דוח פנסיה שנתי 2023',
-    type: 'report',
-    size: '2.1 MB',
-    uploadDate: '2024-03-10',
-    relatedPolicyId: '5',
-    relatedPolicyNumber: 'PEN-2024-007890',
-    requiresSignature: false,
-    signed: false,
+    id: 'd4', name: 'נתוני מסלקה פנסיונית.xlsx', type: 'regulatory', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    size: 350000, uploadDate: '2024-12-15', uploadedBy: '1', status: 'processed',
+    clientId: '4', tags: ['מסלקה', 'פנסיה', 'רגולציה'],
   },
   {
-    id: '5',
-    name: 'טופס בקשת שינוי כיסוי - בריאות',
-    type: 'other',
-    size: '450 KB',
-    uploadDate: '2024-03-25',
-    relatedPolicyId: '2',
-    relatedPolicyNumber: 'BIT-2024-005678',
-    requiresSignature: true,
-    signed: true,
-    signedDate: '2024-03-26',
-  },
-  {
-    id: '6',
-    name: 'תעודת ביטוח רכב',
-    type: 'policy',
-    size: '680 KB',
-    uploadDate: '2024-06-01',
-    relatedPolicyId: '3',
-    relatedPolicyNumber: 'RKV-2024-009012',
-    requiresSignature: false,
-    signed: false,
+    id: 'd5', name: 'דוח הר הביטוח.pdf', type: 'regulatory', mimeType: 'application/pdf',
+    size: 1200000, uploadDate: '2024-12-10', uploadedBy: '1', status: 'processed',
+    clientId: '4', tags: ['הר הביטוח', 'רגולציה'],
   },
 ];
 
-// Mock insurance products
-export const mockProducts: InsuranceProduct[] = [
-  {
-    id: '1',
-    type: 'life',
-    name: 'ביטוח חיים ריסק',
-    nameEn: 'Term Life Insurance',
-    description: 'הגנה כלכלית לבני משפחתך',
-    monthlyPriceFrom: 80,
-    insurer: 'מנורה מבטחים',
-    isRecommended: true,
-    features: ['כיסוי מוות עד 5,000,000 ₪', 'אין ערך פדיון', 'פרמיה נמוכה', 'ביטול בכל עת'],
-  },
-  {
-    id: '2',
-    type: 'health',
-    name: 'ביטוח בריאות מורחב',
-    nameEn: 'Extended Health Insurance',
-    description: 'כיסוי רפואי מקיף לכל המשפחה',
-    monthlyPriceFrom: 180,
-    insurer: 'מכבי שירותי בריאות',
-    isBestValue: true,
-    features: ['ניתוחים בארץ ובחו"ל', 'תרופות מחוץ לסל', 'בדיקות מיוחדות', 'שיניים - 80%'],
-  },
-  {
-    id: '3',
-    type: 'critical',
-    name: 'ביטוח מחלות קשות',
-    nameEn: 'Critical Illness Insurance',
-    description: 'תשלום חד-פעמי בגילוי מחלה קשה',
-    monthlyPriceFrom: 120,
-    insurer: 'הראל ביטוח',
-    features: ['32 מחלות מכוסות', 'תשלום ב-30 יום', 'מינימום דרישות', 'ללא הגבלת שימוש'],
-  },
-  {
-    id: '4',
-    type: 'pension',
-    name: 'קרן פנסיה מקיפה',
-    nameEn: 'Comprehensive Pension Fund',
-    description: 'חיסכון פנסיוני עם הגנות מקיפות',
-    monthlyPriceFrom: 800,
-    insurer: 'מיטב דש',
-    isRecommended: true,
-    features: ['קצבת זקנה', 'ביטוח נכות', 'ביטוח שאירים', 'ניהול מקצועי'],
-  },
-  {
-    id: '5',
-    type: 'home',
-    name: 'ביטוח דירה מקיף',
-    nameEn: 'Comprehensive Home Insurance',
-    description: 'הגנה מלאה על הנכס שלך',
-    monthlyPriceFrom: 90,
-    insurer: 'מגדל ביטוח',
-    isBestValue: true,
-    features: ['מבנה עד 3,000,000 ₪', 'תכולה עד 500,000 ₪', 'אחריות צד שלישי', 'שריפה ופריצה'],
-  },
-  {
-    id: '6',
-    type: 'travel',
-    name: 'ביטוח נסיעות לחו"ל',
-    nameEn: 'International Travel Insurance',
-    description: 'שלווה בכל מקום בעולם',
-    monthlyPriceFrom: 35,
-    insurer: 'AIG ישראל',
-    features: ['חירום רפואי $1M', 'ביטול טיסה', 'אובדן מזוודות', 'חבות צד שלישי'],
-  },
-];
-
-// Mock activity
-export const mockActivity: ActivityItem[] = [
-  {
-    id: '1',
-    type: 'payment',
-    title: 'תשלום פרמיה',
-    description: 'פרמיה חודשית שולמה - ביטוח חיים מנורה',
-    date: '2024-03-01',
-    icon: '💳',
-  },
-  {
-    id: '2',
-    type: 'document_uploaded',
-    title: 'מסמך הועלה',
-    description: 'דוח פנסיה שנתי 2023 הועלה לאחסון',
-    date: '2024-03-10',
-    icon: '📄',
-  },
-  {
-    id: '3',
-    type: 'signed',
-    title: 'מסמך נחתם',
-    description: 'טופס בקשת שינוי כיסוי נחתם דיגיטלית',
-    date: '2024-03-26',
-    icon: '✍️',
-  },
-  {
-    id: '4',
-    type: 'renewal',
-    title: 'חידוש קרוב',
-    description: 'ביטוח בריאות כלל מתחדש ב-15/03/2025',
-    date: '2024-04-01',
-    icon: '🔄',
-  },
-  {
-    id: '5',
-    type: 'claim_filed',
-    title: 'תביעה הוגשה',
-    description: 'תביעת ביטוח בריאות ינואר 2024 - בטיפול',
-    date: '2024-02-20',
-    icon: '📋',
-  },
-];
-
-// Mock reports
 export const mockReports: Report[] = [
   {
-    id: '1',
-    title: 'דוח שנתי 2023 - כל הביטוחים',
-    type: 'annual',
-    year: 2023,
-    createdDate: '2024-01-15',
-    size: '3.4 MB',
+    id: 'r1', title: 'דוח תיק לקוח - ישראל ישראלי', type: 'client_summary', status: 'ready',
+    generatedAt: '2024-12-15', generatedBy: '2', format: 'pdf', data: {},
   },
   {
-    id: '2',
-    title: 'דוח פוליסות פעילות - 2024',
-    type: 'policy',
-    year: 2024,
-    createdDate: '2024-03-01',
-    size: '1.2 MB',
+    id: 'r2', title: 'דוח עמלות רבעוני Q4 2024', type: 'commission', status: 'ready',
+    generatedAt: '2024-12-01', generatedBy: '1', format: 'excel', data: {},
   },
   {
-    id: '3',
-    title: 'דוח פנסיה 2023',
-    type: 'pension',
-    year: 2023,
-    createdDate: '2024-01-20',
-    size: '2.1 MB',
+    id: 'r3', title: 'דוח רגולטורי - רשות שוק ההון', type: 'regulatory', status: 'ready',
+    generatedAt: '2024-11-30', generatedBy: '1', format: 'pdf', data: {},
   },
   {
-    id: '4',
-    title: 'דוח תביעות 2023',
-    type: 'claims',
-    year: 2023,
-    createdDate: '2024-02-01',
-    size: '890 KB',
+    id: 'r4', title: 'ניתוח BI - ביצועי סוכנות', type: 'bi_analytics', status: 'ready',
+    generatedAt: '2024-12-10', generatedBy: '1', format: 'html', data: {},
+  },
+  {
+    id: 'r5', title: 'דוח ביצועי סוכנים', type: 'agent_performance', status: 'ready',
+    generatedAt: '2024-12-05', generatedBy: '1', format: 'pdf', data: {},
   },
 ];
 
-// AI responses for the assistant
-export const aiResponses: Record<string, string[]> = {
-  default: [
-    'אני כאן לעזור לך עם כל שאלה הקשורה לביטוחים שלך. מה תרצה לדעת?',
-    'שאלה מצוינת! אבדוק את הנתונים שלך ואחזור אליך מיד.',
-    'אני יכול לעזור לך עם מידע על הפוליסות שלך, הגשת תביעות, ועוד.',
+export const mockMaslakaData: MaslakaData = {
+  pensionFunds: [
+    {
+      fundName: 'מגדל מקפת פנסיה', provider: 'מגדל', accountNumber: 'PEN-001',
+      balance: 485000, monthlyContribution: 1200, employerContribution: 800,
+      managementFee: 0.5, investmentTrack: 'מסלול כללי',
+      returns: [
+        { year: 2024, percentage: 8.2 }, { year: 2023, percentage: 12.5 },
+        { year: 2022, percentage: -3.1 }, { year: 2021, percentage: 15.8 },
+      ],
+    },
+    {
+      fundName: 'הראל פנסיה', provider: 'הראל', accountNumber: 'PEN-002',
+      balance: 125000, monthlyContribution: 600, employerContribution: 400,
+      managementFee: 0.65, investmentTrack: 'מניות',
+      returns: [
+        { year: 2024, percentage: 10.1 }, { year: 2023, percentage: 14.2 },
+        { year: 2022, percentage: -5.3 }, { year: 2021, percentage: 18.4 },
+      ],
+    },
   ],
+  totalSavings: 610000,
+  lastUpdate: '2024-12-15',
+};
+
+export const mockHarBituachData: HarBituachData = {
   policies: [
-    'יש לך 6 פוליסות ביטוח פעילות: חיים, בריאות, רכב, דירה, פנסיה ונסיעות. הפרמיה הכוללת שלך היא 2,475 ₪ לחודש.',
-    'כל הפוליסות שלך עדכניות. פוליסת הבריאות שלך מתחדשת ב-15/03/2025 - כדאי לבדוק אפשרויות לחסכון.',
-    'ישנה פוליסת נסיעות שפגה - אם מתכנן טיול קרוב, ממליץ לחדש אותה.',
+    {
+      policyNumber: 'HAR-001', company: 'מגדל', type: 'ביטוח חיים', status: 'פעיל',
+      premium: 450, startDate: '2024-01-01', endDate: '2054-01-01', coverageDetails: 'ריסק + חיסכון 1,000,000 ₪',
+    },
+    {
+      policyNumber: 'HAR-002', company: 'הראל', type: 'ביטוח בריאות', status: 'פעיל',
+      premium: 380, startDate: '2024-03-01', endDate: '2025-03-01', coverageDetails: 'תוכנית פלטינום',
+    },
+    {
+      policyNumber: 'HAR-003', company: 'כלל', type: 'ביטוח רכב', status: 'פעיל',
+      premium: 320, startDate: '2024-06-01', endDate: '2025-06-01', coverageDetails: 'מקיף - טויוטה קורולה 2023',
+    },
+    {
+      policyNumber: 'HAR-004', company: 'הפניקס', type: 'ביטוח דירה', status: 'פעיל',
+      premium: 180, startDate: '2024-02-01', endDate: '2025-02-01', coverageDetails: 'מבנה ותכולה 2,500,000 ₪',
+    },
   ],
-  claim: [
-    'להגשת תביעה, אנא מלא את הטופס בפורטל ובצרף את המסמכים הנדרשים. זמן טיפול ממוצע: 10-14 ימי עסקים.',
-    'לתביעת ביטוח בריאות, יש לצרף: קבלות מקוריות, מסמכים רפואיים, ומרשמים. האם אתה רוצה שאפתח טופס תביעה?',
-    'אני יכול לעזור לך לתעד את התביעה. איזה סוג תביעה ברצונך להגיש?',
+  totalPremium: 1330,
+  lastUpdate: '2024-12-10',
+};
+
+export const mockGamalNetData: GamalNetData = {
+  accounts: [
+    {
+      accountName: 'קרן השתלמות מיטב דש', provider: 'מיטב דש', type: 'hishtalmut',
+      balance: 185000, deposits: 600, managementFee: 0.4, returns: 9.8,
+    },
+    {
+      accountName: 'גמל להשקעה - אלטשולר שחם', provider: 'אלטשולר שחם', type: 'gemel',
+      balance: 95000, deposits: 500, managementFee: 0.5, returns: 11.2,
+    },
+    {
+      accountName: 'קופת גמל פסגות', provider: 'פסגות', type: 'gemel',
+      balance: 42000, deposits: 300, managementFee: 0.55, returns: 7.5,
+    },
   ],
-  savings: [
-    'לפי הניתוח שלי, ניתן לחסוך כ-15% על פוליסת הרכב שלך על ידי שינוי מסלול. זה חיסכון של כ-576 ₪ בשנה.',
-    'ממליץ לבדוק שוב את פוליסת הבריאות - ייתכן שיש כיפולים בכיסוי עם קופת החולים. שמח לנתח את המצב.',
-    'בהשוואה לשוק, אתה משלם תחרותי. עם זאת, הצרף כמה פוליסות לחברה אחת עשוי להניב הנחה.',
-  ],
-  coverage: [
-    'הכיסוי שלך כולל: חיים עד 1,000,000 ₪, בריאות מורחבת, רכב מקיף, דירה - מבנה ותכולה 2,500,000 ₪, ופנסיה.',
-    'יש לך כיסוי טוב! עם זאת, ממליץ לשקול ביטוח מחלות קשות - אין לך כרגע כיסוי כזה.',
-    'בהשוואה ללקוחות דומים, רמת הכיסוי שלך מעל הממוצע. ביטוח הפנסיה שלך מצוין.',
+  totalBalance: 322000,
+  lastUpdate: '2024-12-15',
+};
+
+export const mockRegulatoryReports: RegulatoryReport[] = [
+  {
+    id: 'reg1', type: 'maslaka', clientId: '4', status: 'analyzed',
+    data: mockMaslakaData, fetchedAt: '2024-12-15', analyzedAt: '2024-12-15',
+    aiInsights: [
+      'דמי הניהול בקרן הראל גבוהים ב-30% מהממוצע בענף - מומלץ לנהל משא ומתן',
+      'ביצועי מסלול מניות מעולים - תשואה עודפת של 2.1% על המדד',
+      'מומלץ לאחד את הקרנות לספק אחד לחיסכון בדמי ניהול',
+    ],
+  },
+  {
+    id: 'reg2', type: 'har_bituach', clientId: '4', status: 'analyzed',
+    data: mockHarBituachData, fetchedAt: '2024-12-10', analyzedAt: '2024-12-10',
+    aiInsights: [
+      'ביטוח רכב מקיף - ניתן לחסוך עד 15% בהעברה לביטוח ישיר',
+      'ביטוח בריאות - כיסוי כפול עם קופת חולים, שקול צמצום',
+      'מומלץ להוסיף ביטוח מחלות קשות - חסר בתיק',
+    ],
+  },
+  {
+    id: 'reg3', type: 'gamal_net', clientId: '4', status: 'analyzed',
+    data: mockGamalNetData, fetchedAt: '2024-12-15', analyzedAt: '2024-12-15',
+    aiInsights: [
+      'קרן ההשתלמות מתקרבת לגיל פדיון - שקול אסטרטגיית משיכה',
+      'גמל להשקעה - ביצועים מעולים, המשך הפקדה מומלץ',
+      'מומלץ לפזר השקעות - ריכוז גבוה במניות',
+    ],
+  },
+];
+
+export const mockAffiliates: Affiliate[] = [
+  {
+    id: 'af1', name: 'שותף עסקי א', code: 'AFF-001', agentId: '2',
+    commissionRate: 15, referrals: 25, earnings: 18500, isActive: true, createdAt: '2024-06-01',
+  },
+  {
+    id: 'af2', name: 'שותף עסקי ב', code: 'AFF-002', agentId: '2',
+    commissionRate: 12, referrals: 18, earnings: 12200, isActive: true, createdAt: '2024-07-01',
+  },
+  {
+    id: 'af3', name: 'שותף עסקי ג', code: 'AFF-003', agentId: '3',
+    commissionRate: 10, referrals: 8, earnings: 5400, isActive: false, createdAt: '2024-08-01',
+  },
+];
+
+export const mockBankConnections: BankConnection[] = [
+  { id: 'bc1', bankName: 'בנק לאומי', accountType: 'עו"ש', lastSync: '2024-12-15', status: 'connected', balance: 45600 },
+  { id: 'bc2', bankName: 'בנק הפועלים', accountType: 'חיסכון', lastSync: '2024-12-14', status: 'connected', balance: 125000 },
+  { id: 'bc3', bankName: 'בנק דיסקונט', accountType: 'משכנתא', lastSync: '2024-12-10', status: 'disconnected' },
+];
+
+export const mockInvestmentPortfolio: InvestmentPortfolio = {
+  id: 'inv1', clientId: '4', totalValue: 485000, lastUpdated: '2024-12-15',
+  investments: [
+    { id: 'i1', name: 'ת.א 125', type: 'etf', value: 125000, quantity: 50, purchasePrice: 2200, currentPrice: 2500, returns: 15000, returnsPercentage: 13.6 },
+    { id: 'i2', name: 'S&P 500 ETF', type: 'etf', value: 180000, quantity: 30, purchasePrice: 5200, currentPrice: 6000, returns: 24000, returnsPercentage: 15.4 },
+    { id: 'i3', name: 'אג"ח ממשלתי', type: 'bonds', value: 80000, quantity: 100, purchasePrice: 780, currentPrice: 800, returns: 2000, returnsPercentage: 2.6 },
+    { id: 'i4', name: 'קרן נדל"ן', type: 'real_estate', value: 60000, quantity: 10, purchasePrice: 5500, currentPrice: 6000, returns: 5000, returnsPercentage: 9.1 },
+    { id: 'i5', name: 'קרן אג"ח קונצרני', type: 'mutual_funds', value: 40000, quantity: 200, purchasePrice: 190, currentPrice: 200, returns: 2000, returnsPercentage: 5.3 },
   ],
 };
+
+export const mockRecordings: Recording[] = [
+  { id: 'rec1', type: 'audio', duration: 180, createdAt: '2024-12-15', createdBy: '2', relatedTo: 'שיחה עם לקוח - ישראל ישראלי', transcription: 'שיחת ייעוץ בנושא ביטוח חיים...' },
+  { id: 'rec2', type: 'audio', duration: 240, createdAt: '2024-12-10', createdBy: '2', relatedTo: 'פגישת סקירה רבעונית', transcription: 'סקירה רבעונית של תיק ההשקעות...' },
+];
+
+export const mockAIMessages: AIMessage[] = [
+  { id: 'ai1', role: 'assistant', content: 'שלום! אני העוזר החכם של אשורנס. איך אוכל לעזור לך היום?', timestamp: '2024-12-15T10:00:00' },
+];
+
+export const aiResponses: Record<string, string[]> = {
+  default: [
+    'אני כאן לעזור לך עם כל שאלה בנושא ביטוח, פנסיה והשקעות. מה תרצה לדעת?',
+    'שאלה מצוינת! אבדוק את הנתונים שלך ואחזור עם תשובה מפורטת.',
+    'אני יכול לנתח את הנתונים שלך ולהציע המלצות מותאמות אישית.',
+  ],
+  policies: [
+    'יש לך 8 פוליסות פעילות: חיים, בריאות, רכב, דירה, פנסיה, השקעות, עסק וגמל. הפרמיה הכוללת: 4,480 ₪/חודש.',
+    'לפי ניתוח ה-AI שלנו, ניתן לחסוך עד 18% על ביטוח הרכב ו-12% על ביטוח הבריאות.',
+    'מומלץ לשקול ביטוח מחלות קשות - זה חסר בתיק שלך.',
+  ],
+  regulatory: [
+    'נתוני המסלקה הפנסיונית שלך עודכנו לאחרונה ב-15/12/2024. הצבירה הכוללת: 610,000 ₪.',
+    'דוח הר הביטוח מראה 4 פוליסות פעילות. ניתוח AI מזהה חיסכון פוטנציאלי של 2,400 ₪ בשנה.',
+    'נתוני גמל נט מראים 3 חשבונות עם יתרה כוללת של 322,000 ₪. ביצועים מעל הממוצע בענף.',
+  ],
+  investments: [
+    'תיק ההשקעות שלך שווה 485,000 ₪ עם תשואה כוללת של 10.2% השנה.',
+    'מומלץ לאזן מחדש את התיק - חשיפה גבוהה למניות (63%). שקול להגדיל אג"ח.',
+    'ביצועי ה-S&P 500 ETF שלך מעולים - +15.4%. המשך להחזיק.',
+  ],
+  documents: [
+    'ניתחתי 5 מסמכים בתיק שלך. 3 מעובדים, 1 חתום ו-1 ממתין לטיפול.',
+    'אני יכול לנתח כל מסמך שתעלה - PDF, Excel, ZIP ועוד. פשוט גרור ושחרר.',
+    'המסמך האחרון שהועלה נותח בהצלחה. סיכום: פוליסת ביטוח חיים עם כיסוי של 1,000,000 ₪.',
+  ],
+  affiliate: [
+    'תוכנית השותפים שלך: 3 שותפים פעילים, 51 הפניות, רווח כולל: 36,100 ₪.',
+    'שותף AFF-001 הוביל עם 25 הפניות ו-18,500 ₪ רווח. מומלץ להגדיל את שיעור העמלה.',
+    'ליצירת קישור שותפים חדש, עבור לעמוד "שותפים" ולחץ "צור שותף חדש".',
+  ],
+};
+
+export const chartData = {
+  monthlyPremiums: [
+    { month: 'ינו', value: 4200 }, { month: 'פבר', value: 4350 },
+    { month: 'מרץ', value: 4380 }, { month: 'אפר', value: 4380 },
+    { month: 'מאי', value: 4480 }, { month: 'יונ', value: 4480 },
+    { month: 'יול', value: 4480 }, { month: 'אוג', value: 4480 },
+    { month: 'ספט', value: 4480 }, { month: 'אוק', value: 4480 },
+    { month: 'נוב', value: 4480 }, { month: 'דצמ', value: 4480 },
+  ],
+  policyDistribution: [
+    { name: 'חיים', value: 450, color: '#1e3a6e' },
+    { name: 'בריאות', value: 380, color: '#2451a0' },
+    { name: 'רכב', value: 320, color: '#3468c4' },
+    { name: 'דירה', value: 180, color: '#5b8ed8' },
+    { name: 'פנסיה', value: 1200, color: '#c9a227' },
+    { name: 'השקעות', value: 500, color: '#d4b44a' },
+    { name: 'עסק', value: 850, color: '#93b8ea' },
+    { name: 'גמל', value: 600, color: '#0f2244' },
+  ],
+  investmentPerformance: [
+    { month: 'ינו', value: 420000 }, { month: 'פבר', value: 425000 },
+    { month: 'מרץ', value: 435000 }, { month: 'אפר', value: 442000 },
+    { month: 'מאי', value: 450000 }, { month: 'יונ', value: 455000 },
+    { month: 'יול', value: 460000 }, { month: 'אוג', value: 458000 },
+    { month: 'ספט', value: 465000 }, { month: 'אוק', value: 470000 },
+    { month: 'נוב', value: 478000 }, { month: 'דצמ', value: 485000 },
+  ],
+  agentPerformance: [
+    { name: 'שרה לוי', policies: 45, revenue: 125000, clients: 32 },
+    { name: 'דוד מזרחי', policies: 28, revenue: 78000, clients: 20 },
+    { name: 'יוסי כהן', policies: 52, revenue: 145000, clients: 38 },
+    { name: 'מרים שמעוני', policies: 35, revenue: 98000, clients: 25 },
+  ],
+};
+
+export const mockActivity = [
+  { id: 'act1', type: 'policy', message: 'פוליסת ביטוח רכב חודשה', time: 'לפני שעה', icon: '🔄' },
+  { id: 'act2', type: 'document', message: 'מסמך חדש הועלה - דוח מסלקה', time: 'לפני 3 שעות', icon: '📄' },
+  { id: 'act3', type: 'ai', message: 'ניתוח AI הושלם - המלצות חיסכון', time: 'לפני 5 שעות', icon: '🤖' },
+  { id: 'act4', type: 'payment', message: 'תשלום פרמיה חודשי 4,480 ₪', time: 'אתמול', icon: '💳' },
+  { id: 'act5', type: 'regulatory', message: 'נתוני הר הביטוח עודכנו', time: 'לפני יומיים', icon: '🏛️' },
+  { id: 'act6', type: 'sign', message: 'הסכם שירות נחתם דיגיטלית', time: 'לפני 3 ימים', icon: '✍️' },
+  { id: 'act7', type: 'affiliate', message: 'הפניה חדשה - שותף AFF-001', time: 'לפני שבוע', icon: '🤝' },
+];
+
+export const mockProducts = [
+  { id: 'mp1', name: 'ביטוח סייבר לעסקים', provider: 'הראל', category: 'עסקי', price: 'החל מ-250 ₪/חודש', rating: 4.8, features: ['הגנה מפני מתקפות', 'כיסוי נזק כספי', 'שירות תגובה 24/7'] },
+  { id: 'mp2', name: 'ביטוח חיים משולב חיסכון', provider: 'מגדל', category: 'חיים', price: 'החל מ-300 ₪/חודש', rating: 4.6, features: ['כיסוי למקרה מוות', 'רכיב חיסכון', 'הגנה מאינפלציה'] },
+  { id: 'mp3', name: 'קרן פנסיה מקיפה', provider: 'מנורה', category: 'פנסיה', price: 'לפי שכר', rating: 4.7, features: ['דמי ניהול נמוכים', 'מסלולי השקעה מגוונים', 'ביטוח נכות ושאירים'] },
+  { id: 'mp4', name: 'ביטוח נסיעות פרימיום', provider: 'הפניקס', category: 'נסיעות', price: 'החל מ-50 ₪/יום', rating: 4.5, features: ['כיסוי רפואי מלא', 'ביטול טיסה', 'איבוד מזוודות'] },
+  { id: 'mp5', name: 'גמל להשקעה - מסלול צמיחה', provider: 'אלטשולר שחם', category: 'השקעות', price: 'ללא מינימום', rating: 4.9, features: ['תשואה גבוהה', 'נזילות גבוהה', 'דמי ניהול 0.5%'] },
+];

@@ -38,6 +38,17 @@ body {
 ::selection { background: var(--primary-200); color: var(--primary-800); }
 :focus-visible { outline: 2px solid var(--primary-500); outline-offset: 2px; }
 
+.card {
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(10,22,40,0.06);
+  border: 1px solid #e8edf4;
+  transition: box-shadow 0.2s;
+}
+.card:hover {
+  box-shadow: 0 4px 16px rgba(10,22,40,0.1);
+}
+
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -47,3 +58,11 @@ body {
 .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
 .animate-slideIn { animation: slideIn 0.3s ease-out; }
 .animate-spin { animation: spin 1s linear infinite; }
+
+@media (max-width: 768px) {
+  .desktop-sidebar { display: none !important; }
+  .mobile-menu-btn { display: block !important; }
+}
+@media (min-width: 769px) {
+  .mobile-menu-btn { display: none !important; }
+}
