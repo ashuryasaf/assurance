@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assurance | אשורנס</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f5f7fa;
+      color: #222;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #1a3a5c;
+      color: #fff;
+      padding: 1.2rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header .logo {
+      font-size: 1.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    header nav a {
+      color: #cde;
+      text-decoration: none;
+      margin-inline-start: 1.5rem;
+      font-size: 1rem;
+      transition: color 0.2s;
+    }
+
+    header nav a:hover { color: #fff; }
+
+    .hero {
+      background: linear-gradient(135deg, #1a3a5c 60%, #2e6da4 100%);
+      color: #fff;
+      text-align: center;
+      padding: 5rem 1rem 4rem;
+    }
+
+    .hero h1 {
+      font-size: 2.8rem;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      font-size: 1.25rem;
+      max-width: 600px;
+      margin: 0 auto 2rem;
+      opacity: 0.9;
+    }
+
+    .hero a.btn {
+      display: inline-block;
+      background: #fff;
+      color: #1a3a5c;
+      font-weight: 700;
+      padding: 0.8rem 2.2rem;
+      border-radius: 30px;
+      text-decoration: none;
+      font-size: 1.1rem;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .hero a.btn:hover {
+      background: #cde;
+    }
+
+    .features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2rem;
+      justify-content: center;
+      padding: 3rem 2rem;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 2rem 1.5rem;
+      flex: 1 1 240px;
+      max-width: 300px;
+      text-align: center;
+    }
+
+    .feature-card .icon {
+      font-size: 2.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature-card h3 {
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      color: #1a3a5c;
+    }
+
+    .feature-card p {
+      font-size: 0.97rem;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .contact {
+      background: #1a3a5c;
+      color: #fff;
+      text-align: center;
+      padding: 3rem 1rem;
+      margin-top: auto;
+    }
+
+    .contact h2 {
+      font-size: 1.8rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .contact p {
+      font-size: 1.05rem;
+      opacity: 0.85;
+      margin-bottom: 0.5rem;
+    }
+
+    .contact a {
+      color: #a8d4f5;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    .contact a:hover { text-decoration: underline; }
+
+    footer {
+      background: #122840;
+      color: #aaa;
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">Assurance</div>
+    <nav>
+      <a href="#services">שירותים</a>
+      <a href="#contact">צור קשר</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <h1>ביטוח חכם. שקט נפשי אמיתי.</h1>
+    <p>אנחנו כאן כדי להגן עליך ועל מה שחשוב לך – עם פתרונות ביטוח מקצועיים ואישיים.</p>
+    <a href="#contact" class="btn">דברו איתנו</a>
+  </section>
+
+  <section class="features" id="services">
+    <div class="feature-card">
+      <div class="icon">🛡️</div>
+      <h3>ביטוח חיים</h3>
+      <p>כיסוי מקיף שדואג לעתיד המשפחה שלך בכל מצב.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">🏠</div>
+      <h3>ביטוח דירה</h3>
+      <p>הגנה על הבית שלך ותכולתו מפני נזקים ואסונות.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">🚗</div>
+      <h3>ביטוח רכב</h3>
+      <p>ביטוח רכב תחרותי עם שירות מהיר ומקצועי.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">💼</div>
+      <h3>ביטוח עסקי</h3>
+      <p>פתרונות ביטוח מותאמים אישית לעסקים מכל הסוגים.</p>
+    </div>
+  </section>
+
+  <section class="contact" id="contact">
+    <h2>צריכים עזרה?</h2>
+    <p>צוות השירות שלנו זמין עבורכם בכל שאלה.</p>
+    <p>
+      <a href="mailto:service@assurance.co.il">service@assurance.co.il</a>
+    </p>
+  </section>
+
+  <footer>
+    &copy; 2026 Assurance &mdash; www.assurance.co.il
+  </footer>
+
+</body>
+</html>
