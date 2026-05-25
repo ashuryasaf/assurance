@@ -21,7 +21,7 @@ export async function GET() {
 
   const ready = dbOk && (userCount ?? 0) > 0;
   const warnings: string[] = [];
-  if (!sessionEnvSet) {
+  if (sessionSource === "persisted") {
     warnings.push(
       "SESSION_SECRET is not set. A persisted secret in /app/data/.session-secret is being used. Set SESSION_SECRET in the environment for production.",
     );

@@ -38,8 +38,8 @@ async function preflight() {
       "SESSION_SECRET is not set in env. The app will generate (or reuse) a random secret on the data volume so login still works, but you should set this for production.",
     );
   } else if (process.env.SESSION_SECRET.length < 16) {
-    issues.push(
-      `SESSION_SECRET is only ${process.env.SESSION_SECRET.length} chars; need 16+. Generate a new one: openssl rand -base64 32`,
+    notes.push(
+      `SESSION_SECRET is only ${process.env.SESSION_SECRET.length} chars; need 16+. The app will fall back to a generated secret. Generate a proper one: openssl rand -base64 32`,
     );
   }
 
