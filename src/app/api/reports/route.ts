@@ -1,13 +1,16 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser, requireRole } from "@/lib/dal";
+import { clientScopeIdsFor } from "@/lib/scope";
 import { handleError, ok, parseJSON } from "@/lib/api";
 import { serializeReport } from "@/lib/serializers";
 
 export async function GET() {
   try {
-    await requireUser();
-    const reports = await prisma.report.findMany({ orderBy: { generatedAt: "desc" } });
+    const me = await requireUser();
+    const ids = await clientScopeIdsFor(me);
+    const where = ids ? { generatedById: { in: ids } } : {};
+    const reports = await prisma.report.findMany({ where, orderBy: { generatedAt: "desc" } });
     return ok({ reports: reports.map((r) => serializeReport(r)) });
   } catch (error) {
     return handleError(error);

@@ -77,6 +77,17 @@ export async function POST(req: Request) {
     const docType = (form.get("type") as string) || "other";
     const policyIdRaw = form.get("policyId");
     const policyId = typeof policyIdRaw === "string" && policyIdRaw.length > 0 ? policyIdRaw : null;
+
+    if (policyId) {
+      const policy = await prisma.policy.findUnique({
+        where: { id: policyId },
+        select: { clientId: true },
+      });
+      if (!policy || policy.clientId !== targetClientId) {
+        return err(400, "Policy does not belong to the specified client");
+      }
+    }
+
     const tagsRaw = form.get("tags");
     let tags: string[] = [];
     if (typeof tagsRaw === "string" && tagsRaw.length > 0) {

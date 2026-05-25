@@ -1,38 +1,48 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/dal";
+import { clientScopeIdsFor } from "@/lib/scope";
 import { handleError, ok } from "@/lib/api";
 
 export async function GET() {
   try {
     const me = await requireUser();
+    const ids = await clientScopeIdsFor(me);
+    const clientFilter = ids ? { clientId: { in: ids } } : {};
 
-    const [policies, documents, portfolio, activity, regulatoryCount] = await Promise.all([
-      prisma.policy.findMany({ where: { clientId: me.id } }),
-      prisma.document.findMany({ where: { clientId: me.id } }),
-      prisma.investmentPortfolio.findUnique({
-        where: { clientId: me.id },
+    const [policies, documents, portfolios, activity, regulatoryCount] = await Promise.all([
+      prisma.policy.findMany({ where: clientFilter }),
+      prisma.document.findMany({ where: clientFilter }),
+      prisma.investmentPortfolio.findMany({
+        where: clientFilter,
         include: { investments: true },
       }),
       prisma.activityLog.findMany({
-        where: { OR: [{ userId: me.id }, { userId: null }] },
+        where: ids
+          ? { OR: [{ userId: { in: ids } }, { userId: null }] }
+          : { OR: [{ userId: me.id }, { userId: null }] },
         orderBy: { createdAt: "desc" },
         take: 10,
       }),
-      prisma.regulatoryReport.count({ where: { clientId: me.id } }),
+      prisma.regulatoryReport.count({ where: clientFilter }),
     ]);
 
+    const totalInvestments = portfolios.reduce((s, p) => s + p.totalValue, 0);
+    const totalReturns = portfolios.reduce(
+      (s, p) => s + p.investments.reduce((si, i) => si + i.returns, 0),
+      0,
+    );
     const totalPremium = policies.reduce((s, p) => s + p.premium, 0);
     const policyDistribution = aggregateByType(policies);
     const monthlyPremiums = generateMonthlyPremiums(totalPremium);
-    const investmentPerformance = generateInvestmentTimeline(portfolio?.totalValue ?? 0);
+    const investmentPerformance = generateInvestmentTimeline(totalInvestments);
 
     return ok({
       summary: {
         totalPolicies: policies.length,
         totalPremium,
         totalDocuments: documents.length,
-        totalInvestments: portfolio?.totalValue ?? 0,
-        totalReturns: portfolio?.investments.reduce((s, i) => s + i.returns, 0) ?? 0,
+        totalInvestments,
+        totalReturns,
         regulatoryFeeds: regulatoryCount,
       },
       policyDistribution,

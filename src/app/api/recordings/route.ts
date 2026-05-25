@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/dal";
+import { clientScopeIdsFor } from "@/lib/scope";
 import { handleError, ok, err } from "@/lib/api";
 import { serializeRecording } from "@/lib/serializers";
 import { writeUpload } from "@/lib/storage";
@@ -7,7 +8,8 @@ import { writeUpload } from "@/lib/storage";
 export async function GET() {
   try {
     const me = await requireUser();
-    const where = me.role === "client" ? { createdById: me.id } : {};
+    const ids = await clientScopeIdsFor(me);
+    const where = ids ? { createdById: { in: ids } } : {};
     const recordings = await prisma.recording.findMany({
       where,
       orderBy: { createdAt: "desc" },

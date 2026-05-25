@@ -58,6 +58,9 @@ export async function PUT(req: Request) {
     if (invite.expiresAt < new Date()) return err(410, "Invite expired");
 
     const email = data.email.toLowerCase().trim();
+    if (invite.email && invite.email.toLowerCase().trim() !== email) {
+      return err(403, "This invite was issued for a different email address");
+    }
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return err(409, "Email already registered");
 
