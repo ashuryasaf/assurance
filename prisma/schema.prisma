@@ -1,0 +1,275 @@
+// Real persistent backend for the Assurance / Ashuri Insurance Agency Portal.
+// Replaces the previous in-memory mock data with SQL-backed entities.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// -----------------------------------------------------------------------------
+// Auth & people
+// -----------------------------------------------------------------------------
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  phone           String
+  idNumber        String
+  role            String
+  permissions     String
+  avatar          String?
+  agencyId        String?
+  parentAgentId   String?
+  licenseNumber   String?
+  specializations String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  lastLogin       DateTime?
+
+  agency           Agency?      @relation("UserAgency", fields: [agencyId], references: [id])
+  parentAgent      User?        @relation("AgentHierarchy", fields: [parentAgentId], references: [id])
+  subAgents        User[]       @relation("AgentHierarchy")
+  ownedAgencies    Agency[]     @relation("AgencyOwner")
+  policiesAsClient Policy[]     @relation("ClientPolicies")
+  policiesAsAgent  Policy[]     @relation("AgentPolicies")
+  documents        Document[]   @relation("ClientDocuments")
+  uploadedDocs     Document[]   @relation("UploaderDocuments")
+  reports          Report[]
+  bankConnections  BankConnection[]
+  portfolio        InvestmentPortfolio?
+  recordings       Recording[]
+  conversations    AIConversation[]
+  affiliates       Affiliate[]
+  regulatoryRpts   RegulatoryReport[]
+  invitesIssued    InviteToken[] @relation("InviteIssuer")
+
+  @@index([role])
+  @@index([agencyId])
+}
+
+model InviteToken {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  email         String?
+  role          String    @default("client")
+  agencyId      String?
+  parentAgentId String?
+  issuedById    String?
+  issuedBy      User?     @relation("InviteIssuer", fields: [issuedById], references: [id])
+  usedAt        DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+}
+
+model Agency {
+  id               String   @id @default(cuid())
+  name             String
+  licenseNumber    String   @unique
+  parentAgencyId   String?
+  parent           Agency?  @relation("AgencyHierarchy", fields: [parentAgencyId], references: [id])
+  subAgencies      Agency[] @relation("AgencyHierarchy")
+  ownerId          String
+  owner            User     @relation("AgencyOwner", fields: [ownerId], references: [id])
+  address          String
+  phone            String
+  email            String
+  logo             String?
+  isActive         Boolean  @default(true)
+  regulatoryStatus String   @default("active")
+  createdAt        DateTime @default(now())
+  agents           User[]   @relation("UserAgency")
+}
+
+// -----------------------------------------------------------------------------
+// Insurance / financial entities
+// -----------------------------------------------------------------------------
+
+model Policy {
+  id                String   @id @default(cuid())
+  policyNumber      String   @unique
+  type              String
+  provider          String
+  status            String
+  premium           Float
+  premiumFrequency  String
+  startDate         DateTime
+  endDate           DateTime
+  coverageAmount    Float
+  clientId          String
+  client            User     @relation("ClientPolicies", fields: [clientId], references: [id])
+  agentId           String
+  agent             User     @relation("AgentPolicies", fields: [agentId], references: [id])
+  details           String
+  createdAt         DateTime @default(now())
+  lastUpdated       DateTime @updatedAt
+  documents         Document[]
+
+  @@index([clientId])
+  @@index([agentId])
+  @@index([type])
+}
+
+model Document {
+  id            String    @id @default(cuid())
+  name          String
+  type          String
+  mimeType      String
+  size          Int
+  storagePath   String?
+  status        String    @default("pending")
+  policyId      String?
+  policy        Policy?   @relation(fields: [policyId], references: [id])
+  clientId      String
+  client        User      @relation("ClientDocuments", fields: [clientId], references: [id])
+  uploadedById  String
+  uploadedBy    User      @relation("UploaderDocuments", fields: [uploadedById], references: [id])
+  tags          String    @default("[]")
+  aiAnalysis    String?
+  signatureData String?
+  uploadDate    DateTime  @default(now())
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model Report {
+  id            String   @id @default(cuid())
+  title         String
+  type          String
+  status        String   @default("ready")
+  format        String   @default("pdf")
+  filters       String?
+  data          String   @default("{}")
+  generatedById String
+  generatedBy   User     @relation(fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
+
+  @@index([type])
+}
+
+model RegulatoryReport {
+  id         String    @id @default(cuid())
+  type       String
+  clientId   String
+  client     User      @relation(fields: [clientId], references: [id])
+  status     String    @default("pending")
+  data       String    @default("{}")
+  aiInsights String    @default("[]")
+  fetchedAt  DateTime?
+  analyzedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([clientId, type])
+  @@index([clientId])
+}
+
+model Affiliate {
+  id             String   @id @default(cuid())
+  name           String
+  code           String   @unique
+  agentId        String
+  agent          User     @relation(fields: [agentId], references: [id])
+  commissionRate Float
+  referrals      Int      @default(0)
+  earnings       Float    @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+}
+
+model BankConnection {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  bankName    String
+  accountType String
+  status      String   @default("connected")
+  balance     Float?
+  lastSync    DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+
+model InvestmentPortfolio {
+  id          String       @id @default(cuid())
+  clientId    String       @unique
+  client      User         @relation(fields: [clientId], references: [id])
+  totalValue  Float        @default(0)
+  lastUpdated DateTime     @updatedAt
+  investments Investment[]
+}
+
+model Investment {
+  id                String              @id @default(cuid())
+  portfolioId       String
+  portfolio         InvestmentPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  name              String
+  type              String
+  value             Float
+  quantity          Float
+  purchasePrice     Float
+  currentPrice      Float
+  returns           Float
+  returnsPercentage Float
+}
+
+model Recording {
+  id            String   @id @default(cuid())
+  type          String
+  duration      Int
+  storagePath   String?
+  transcription String?
+  relatedTo     String?
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+model AIConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  context   String      @default("general")
+  createdAt DateTime    @default(now())
+  messages  AIMessage[]
+}
+
+model AIMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  attachments    String?
+  createdAt      DateTime       @default(now())
+}
+
+model MarketplaceProduct {
+  id        String   @id @default(cuid())
+  name      String
+  provider  String
+  category  String
+  price     String
+  rating    Float
+  features  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String
+  message   String
+  icon      String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}

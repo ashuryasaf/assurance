@@ -1,7 +1,8 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockDocuments } from '@/lib/mockData';
+import { apiFetch, useApi } from '@/lib/client-api';
+import type { Document } from '@/lib/types';
 import { useState, useRef, useEffect } from 'react';
 
 export default function ESignPage() {
@@ -10,11 +11,14 @@ export default function ESignPage() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSig, setHasSig] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState('');
-  const [signedDocs, setSignedDocs] = useState<string[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { data, refresh } = useApi<{ documents: Document[] }>('/api/documents');
+  const docs = data?.documents ?? [];
 
-  const unsignedDocs = mockDocuments.filter(d => d.status !== 'signed' && !signedDocs.includes(d.id));
-  const signedDocsList = mockDocuments.filter(d => d.status === 'signed' || signedDocs.includes(d.id));
+  const unsignedDocs = docs.filter(d => d.status !== 'signed');
+  const signedDocsList = docs.filter(d => d.status === 'signed');
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -70,13 +74,29 @@ export default function ESignPage() {
     setHasSig(false);
   };
 
-  const submitSignature = () => {
+  const submitSignature = async () => {
     if (!selectedDocId || !hasSig) return;
-    setSignedDocs(prev => [...prev, selectedDocId]);
-    setSelectedDocId('');
-    clearCanvas();
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const signatureImage = canvas.toDataURL('image/png');
+      await apiFetch(`/api/documents/${selectedDocId}/sign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signatureImage }),
+      });
+      setSelectedDocId('');
+      clearCanvas();
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      await refresh();
+    } catch (err) {
+      setErrorMsg((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -93,16 +113,19 @@ export default function ESignPage() {
           ✅ {t('signedSuccessfully')}
         </div>
       )}
+      {errorMsg && (
+        <div style={{ padding: '12px 20px', borderRadius: '10px', background: '#fce4ec', color: '#c62828', marginBottom: '16px', fontWeight: '600' }}>
+          ⚠️ {errorMsg}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-        {/* Signing Area */}
         <div>
           <div className="card" style={{ padding: '24px', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>
               {t('signDocument')}
             </h3>
 
-            {/* Document Selection */}
             <select
               value={selectedDocId}
               onChange={e => setSelectedDocId(e.target.value)}
@@ -117,7 +140,6 @@ export default function ESignPage() {
               ))}
             </select>
 
-            {/* Canvas */}
             <div style={{
               border: '2px solid #dae8f8', borderRadius: '12px', overflow: 'hidden', marginBottom: '12px',
               background: 'white',
@@ -142,18 +164,17 @@ export default function ESignPage() {
               }}>
                 🗑️ {t('clearSignature')}
               </button>
-              <button onClick={submitSignature} disabled={!selectedDocId || !hasSig} style={{
+              <button onClick={submitSignature} disabled={!selectedDocId || !hasSig || submitting} style={{
                 flex: 1, padding: '10px', borderRadius: '10px', border: 'none',
-                background: (selectedDocId && hasSig) ? 'linear-gradient(135deg, #1e3a6e, #2451a0)' : '#dae8f8',
-                color: 'white', fontWeight: '700', cursor: (selectedDocId && hasSig) ? 'pointer' : 'not-allowed',
+                background: (selectedDocId && hasSig && !submitting) ? 'linear-gradient(135deg, #1e3a6e, #2451a0)' : '#dae8f8',
+                color: 'white', fontWeight: '700', cursor: (selectedDocId && hasSig && !submitting) ? 'pointer' : 'not-allowed',
               }}>
-                ✅ {t('submitSignature')}
+                {submitting ? '⏳ שולח...' : `✅ ${t('submitSignature')}`}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Documents Status */}
         <div>
           <div className="card" style={{ padding: '24px', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>
@@ -183,6 +204,9 @@ export default function ESignPage() {
             <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>
               ✅ מסמכים חתומים
             </h3>
+            {signedDocsList.length === 0 && (
+              <div style={{ color: '#6b7a9a', fontSize: '14px' }}>אין מסמכים חתומים עדיין.</div>
+            )}
             {signedDocsList.map(doc => (
               <div key={doc.id} style={{
                 padding: '12px', borderRadius: '10px', background: '#d4edda', marginBottom: '8px',
@@ -191,7 +215,11 @@ export default function ESignPage() {
                 <span>✅</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: '600', fontSize: '13px', color: '#155724' }}>{doc.name}</div>
-                  <div style={{ fontSize: '11px', color: '#155724' }}>{doc.uploadDate}</div>
+                  <div style={{ fontSize: '11px', color: '#155724' }}>
+                    {doc.signatureData?.signedAt
+                      ? new Date(doc.signatureData.signedAt).toLocaleDateString('he-IL')
+                      : doc.uploadDate}
+                  </div>
                 </div>
               </div>
             ))}

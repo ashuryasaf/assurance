@@ -1,7 +1,8 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockRecordings } from '@/lib/mockData';
+import { apiFetch, useApi } from '@/lib/client-api';
+import type { Recording } from '@/lib/types';
 import { useState, useRef, useEffect } from 'react';
 
 export default function RecordingsPage() {
@@ -9,11 +10,15 @@ export default function RecordingsPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingType, setRecordingType] = useState<'audio' | 'video'>('audio');
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const { data, refresh } = useApi<{ recordings: Recording[] }>('/api/recordings');
+  const recordings = data?.recordings ?? [];
 
   useEffect(() => {
     if (isRecording) {
-      timerRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
+      timerRef.current = setInterval(() => setRecordingTime(s => s + 1), 1000);
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
     }
@@ -26,13 +31,33 @@ export default function RecordingsPage() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const stopAndSave = async () => {
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      const form = new FormData();
+      form.append('type', recordingType);
+      form.append('duration', String(recordingTime));
+      form.append('relatedTo', `הקלטה ${recordingType === 'audio' ? 'שמע' : 'וידאו'} - ${new Date().toLocaleString('he-IL')}`);
+      await apiFetch('/api/recordings', { method: 'POST', body: form });
+      setIsRecording(false);
+      setRecordingTime(0);
+      await refresh();
+    } catch (err) {
+      setErrorMsg((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="animate-fadeIn" style={{ maxWidth: '1400px', margin: '0 auto' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '800', color: '#1e3a6e', marginBottom: '24px' }}>
         🎙️ {t('recordingsTitle')}
       </h1>
 
-      {/* Recording Control */}
+      {errorMsg && <div style={{ color: '#c62828', marginBottom: '16px' }}>⚠️ {errorMsg}</div>}
+
       <div className="card" style={{ padding: '32px', marginBottom: '24px', textAlign: 'center' }}>
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '20px' }}>
           {(['audio', 'video'] as const).map(type => (
@@ -54,25 +79,29 @@ export default function RecordingsPage() {
         )}
 
         <button
-          onClick={() => setIsRecording(!isRecording)}
+          onClick={() => (isRecording ? void stopAndSave() : setIsRecording(true))}
+          disabled={saving}
           style={{
             width: '80px', height: '80px', borderRadius: '50%', border: 'none', cursor: 'pointer',
             background: isRecording ? '#c62828' : 'linear-gradient(135deg, #1e3a6e, #2451a0)',
             color: 'white', fontSize: '32px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
             transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            opacity: saving ? 0.7 : 1,
           }}
         >
-          {isRecording ? '⏹' : '⏺'}
+          {saving ? '…' : isRecording ? '⏹' : '⏺'}
         </button>
         <div style={{ marginTop: '12px', color: '#6b7a9a', fontSize: '14px' }}>
           {isRecording ? t('stopRecording') : t('startRecording')}
         </div>
       </div>
 
-      {/* Recordings List */}
       <div className="card" style={{ padding: '24px' }}>
         <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>הקלטות קודמות</h3>
-        {mockRecordings.map(rec => (
+        {recordings.length === 0 && (
+          <div style={{ color: '#6b7a9a' }}>אין הקלטות עדיין.</div>
+        )}
+        {recordings.map(rec => (
           <div key={rec.id} style={{
             padding: '16px', borderRadius: '12px', background: '#f8f9fc', marginBottom: '10px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px',
@@ -93,24 +122,15 @@ export default function RecordingsPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button style={{
-                padding: '6px 14px', borderRadius: '8px', border: '1px solid #dae8f8',
-                background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-              }}>
-                ▶ נגן
-              </button>
-              <button style={{
-                padding: '6px 14px', borderRadius: '8px', border: '1px solid #dae8f8',
-                background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-              }}>
-                📝 {t('transcription')}
-              </button>
-              <button style={{
-                padding: '6px 14px', borderRadius: '8px', border: '1px solid #dae8f8',
-                background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-              }}>
-                ⬇ {t('download')}
-              </button>
+              {rec.url && (
+                <a href={rec.url} target="_blank" rel="noreferrer" style={{
+                  padding: '6px 14px', borderRadius: '8px', border: '1px solid #dae8f8',
+                  background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600',
+                  textDecoration: 'none', cursor: 'pointer',
+                }}>
+                  ⬇ {t('download')}
+                </a>
+              )}
             </div>
           </div>
         ))}

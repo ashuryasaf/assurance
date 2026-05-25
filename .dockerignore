@@ -9,3 +9,5 @@ README.md
 LICENSE
 .env*
 *.md
+data/
+src/generated/

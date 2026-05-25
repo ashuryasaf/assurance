@@ -1,11 +1,17 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockInvestmentPortfolio, chartData } from '@/lib/mockData';
+import { useApi } from '@/lib/client-api';
+import type { InvestmentPortfolio } from '@/lib/types';
+
+type SummaryResp = { investmentPerformance: { month: string; value: number }[] };
 
 export default function InvestmentsPage() {
   const { t } = useLanguage();
-  const portfolio = mockInvestmentPortfolio;
+  const { data: portfolioRes, loading, error } = useApi<{ portfolio: InvestmentPortfolio | null }>('/api/investments');
+  const summary = useApi<SummaryResp>('/api/dashboard/summary');
+  const portfolio = portfolioRes?.portfolio;
+  const performance = summary.data?.investmentPerformance ?? [];
 
   const typeLabels: Record<string, string> = {
     stocks: 'מניות', bonds: 'אג"ח', mutual_funds: 'קרנות נאמנות',
@@ -17,8 +23,28 @@ export default function InvestmentsPage() {
     etf: '#c9a227', real_estate: '#1a8c5a', crypto: '#8b5cf6',
   };
 
+  if (loading) {
+    return <div style={{ padding: '20px', color: '#6b7a9a' }}>טוען תיק השקעות...</div>;
+  }
+
+  if (error || !portfolio) {
+    return (
+      <div className="animate-fadeIn" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: '800', color: '#1e3a6e', marginBottom: '24px' }}>
+          📈 {t('investmentPortfolio')}
+        </h1>
+        <div className="card" style={{ padding: '24px', color: '#6b7a9a' }}>
+          {error ? `⚠️ ${error}` : 'לא נמצא תיק השקעות. צור קשר עם הסוכן שלך כדי להגדיר תיק.'}
+        </div>
+      </div>
+    );
+  }
+
   const totalReturns = portfolio.investments.reduce((s, i) => s + i.returns, 0);
-  const totalReturnsPct = ((totalReturns / (portfolio.totalValue - totalReturns)) * 100).toFixed(1);
+  const totalReturnsPct =
+    portfolio.totalValue - totalReturns > 0
+      ? ((totalReturns / (portfolio.totalValue - totalReturns)) * 100).toFixed(1)
+      : '0.0';
 
   return (
     <div className="animate-fadeIn" style={{ maxWidth: '1400px', margin: '0 auto' }}>
@@ -26,7 +52,6 @@ export default function InvestmentsPage() {
         📈 {t('investmentPortfolio')}
       </h1>
 
-      {/* Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div className="card" style={{ padding: '20px', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', borderRadius: '14px' }}>
           <div style={{ fontSize: '13px', opacity: 0.8 }}>{t('totalValue')}</div>
@@ -43,13 +68,14 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      {/* Performance Chart */}
       <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
         <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '20px' }}>ביצועי תיק - 12 חודשים אחרונים</h3>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '200px' }}>
-          {chartData.investmentPerformance.map((d, i) => {
-            const min = 400000; const max = 500000;
-            const height = ((d.value - min) / (max - min)) * 180;
+          {performance.map((d, i) => {
+            const max = Math.max(1, ...performance.map(m => m.value));
+            const min = Math.min(...performance.map(m => m.value));
+            const span = Math.max(1, max - min);
+            const height = ((d.value - min) / span) * 180 + 8;
             return (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                 <div style={{ fontSize: '10px', color: '#6b7a9a', fontWeight: '600' }}>₪{(d.value / 1000).toFixed(0)}K</div>
@@ -65,7 +91,6 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      {/* Investment Allocation */}
       <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
         <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>{t('allocation')}</h3>
         <div style={{ display: 'flex', height: '32px', borderRadius: '16px', overflow: 'hidden', marginBottom: '16px' }}>
@@ -88,7 +113,6 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      {/* Investments Table */}
       <div className="card" style={{ padding: '24px', overflowX: 'auto' }}>
         <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>פירוט השקעות</h3>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>

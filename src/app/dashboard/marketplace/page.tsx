@@ -1,16 +1,28 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockProducts } from '@/lib/mockData';
+import { useApi } from '@/lib/client-api';
 import { useState } from 'react';
+
+type Product = {
+  id: string;
+  name: string;
+  provider: string;
+  category: string;
+  price: string;
+  rating: number;
+  features: string[];
+};
 
 export default function MarketplacePage() {
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const { data, loading, error } = useApi<{ products: Product[] }>('/api/marketplace');
+  const products = data?.products ?? [];
 
-  const categories = ['all', ...new Set(mockProducts.map(p => p.category))];
-  const filtered = mockProducts.filter(p => {
+  const categories = ['all', ...new Set(products.map(p => p.category))];
+  const filtered = products.filter(p => {
     const matchSearch = !search || p.name.includes(search) || p.provider.includes(search);
     const matchCat = category === 'all' || p.category === category;
     return matchSearch && matchCat;
@@ -22,7 +34,8 @@ export default function MarketplacePage() {
         🛒 {t('marketplace')}
       </h1>
 
-      {/* Search & Filter */}
+      {error && <div style={{ color: '#c62828', marginBottom: '16px' }}>⚠️ {error}</div>}
+
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search')}
           style={{ flex: 1, minWidth: '200px', padding: '10px 16px', borderRadius: '10px', border: '1.5px solid #dae8f8', fontSize: '14px', outline: 'none' }} />
@@ -37,6 +50,8 @@ export default function MarketplacePage() {
           ))}
         </div>
       </div>
+
+      {loading && <div style={{ color: '#6b7a9a' }}>טוען מוצרים...</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
         {filtered.map(product => (

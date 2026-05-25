@@ -1,3 +1,11 @@
+// SEED DATA ONLY.
+//
+// This module previously powered the app at runtime. It is now exclusively
+// loaded by `prisma/seed.ts` to populate a fresh SQLite database with sample
+// agencies, users, policies, documents, regulatory snapshots, recordings,
+// marketplace products, etc. Do NOT import these constants from any UI or API
+// route — runtime data is read from the database via Prisma instead.
+
 import type {
   User, Agency, Policy, Document, Report, RegulatoryReport,
   Affiliate, BankConnection, InvestmentPortfolio, AIMessage,
