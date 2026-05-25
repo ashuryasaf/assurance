@@ -4,6 +4,11 @@ RUN apk add --no-cache libc6-compat python3 make g++ openssl
 # ---- Dependencies ----
 FROM base AS deps
 WORKDIR /app
+# `npm ci` triggers our postinstall hook (`prisma generate`), which loads
+# prisma.config.ts and requires DATABASE_URL via env(). Provide a placeholder
+# value here so the install step does not fail with PrismaConfigEnvError; the
+# real connection string is supplied at runtime.
+ENV DATABASE_URL="file:./data/app.db"
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./
