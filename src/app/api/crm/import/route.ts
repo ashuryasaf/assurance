@@ -1,23 +1,36 @@
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/dal";
+import { requireRole, type CurrentUser } from "@/lib/dal";
 import { handleError, ok, err } from "@/lib/api";
 import { parseCustomerFile, type ParsedRow } from "@/lib/crm/parse";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_ROWS = 5000;
 
+function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
+  if (me.role === "super_admin" || me.role === "admin") return true;
+  if (me.agencyId && lead.agencyId === me.agencyId) return true;
+  if (lead.agentId === me.id) return true;
+  return false;
+}
+
 export async function GET() {
   try {
     const me = await requireRole("agent");
-    const filter =
-      me.role === "super_admin" || me.role === "admin"
-        ? {}
-        : me.role === "agency_owner" && me.agencyId
-        ? { uploadedBy: { agencyId: me.agencyId } }
-        : { uploadedById: me.id };
+    let filter: Record<string, unknown> = {};
+    if (me.role !== "super_admin" && me.role !== "admin") {
+      if (me.role === "agency_owner" && me.agencyId) {
+        const agencyUsers = await prisma.user.findMany({
+          where: { agencyId: me.agencyId },
+          select: { id: true },
+        });
+        filter = { uploadedById: { in: agencyUsers.map((u) => u.id) } };
+      } else {
+        filter = { uploadedById: me.id };
+      }
+    }
 
     const imports = await prisma.customerImport.findMany({
-      where: filter as never,
+      where: filter,
       orderBy: { createdAt: "desc" },
       take: 50,
     });
@@ -90,6 +103,21 @@ export async function POST(req: Request) {
       const idNumber = row.lead.idNumber;
       const existing = await prisma.lead.findUnique({ where: { idNumber } });
 
+      if (existing && !canModifyLead(me, existing)) {
+        errorCount++;
+        await prisma.leadImportRow.create({
+          data: {
+            importId: job.id,
+            rowIndex: row.rowIndex,
+            status: "error",
+            raw: JSON.stringify(row.raw),
+            error: "Lead belongs to another tenant",
+            idNumber,
+          },
+        });
+        continue;
+      }
+
       const baseData = {
         firstName: row.lead.firstName,
         lastName: row.lead.lastName,
@@ -109,7 +137,6 @@ export async function POST(req: Request) {
       let rowStatus: "created" | "updated";
 
       if (existing) {
-        // Merge metadata: existing JSON + new entries (new wins for matching keys).
         let merged: Record<string, unknown> = {};
         try {
           merged = JSON.parse(existing.metadata) as Record<string, unknown>;

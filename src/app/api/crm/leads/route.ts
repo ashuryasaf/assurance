@@ -5,6 +5,13 @@ import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { serializeLead } from "@/lib/crm/serializers";
 import { normaliseIdNumber } from "@/lib/crm/parse";
 
+function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
+  if (me.role === "super_admin" || me.role === "admin") return true;
+  if (me.agencyId && lead.agencyId === me.agencyId) return true;
+  if (lead.agentId === me.id) return true;
+  return false;
+}
+
 function leadScopeFilter(me: CurrentUser) {
   if (me.role === "super_admin" || me.role === "admin") return {};
   if (me.role === "agency_owner" && me.agencyId) return { agencyId: me.agencyId };
@@ -73,42 +80,53 @@ export async function POST(req: Request) {
     const idNumber = normaliseIdNumber(body.idNumber);
     if (!idNumber) return err(400, "Invalid Israeli ID number");
 
-    const lead = await prisma.lead.upsert({
-      where: { idNumber },
-      create: {
-        idNumber,
-        firstName: body.firstName,
-        lastName: body.lastName,
-        email: body.email || null,
-        phone: body.phone,
-        altPhone: body.altPhone,
-        address: body.address,
-        city: body.city,
-        birthDate: body.birthDate ? new Date(body.birthDate) : null,
-        gender: body.gender,
-        source: body.source,
-        status: body.status ?? "new",
-        notes: body.notes,
-        metadata: JSON.stringify(body.metadata ?? {}),
-        agentId: me.id,
-        agencyId: me.agencyId,
-      },
-      update: {
-        firstName: body.firstName ?? undefined,
-        lastName: body.lastName ?? undefined,
-        email: body.email || undefined,
-        phone: body.phone ?? undefined,
-        altPhone: body.altPhone ?? undefined,
-        address: body.address ?? undefined,
-        city: body.city ?? undefined,
-        birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
-        gender: body.gender ?? undefined,
-        source: body.source ?? undefined,
-        status: body.status ?? undefined,
-        notes: body.notes ?? undefined,
-        ...(body.metadata && { metadata: JSON.stringify(body.metadata) }),
-      },
-    });
+    const existing = await prisma.lead.findUnique({ where: { idNumber } });
+    if (existing && !canModifyLead(me, existing)) {
+      return err(403, "Lead belongs to another tenant");
+    }
+
+    let lead;
+    if (existing) {
+      lead = await prisma.lead.update({
+        where: { id: existing.id },
+        data: {
+          firstName: body.firstName ?? undefined,
+          lastName: body.lastName ?? undefined,
+          email: body.email || undefined,
+          phone: body.phone ?? undefined,
+          altPhone: body.altPhone ?? undefined,
+          address: body.address ?? undefined,
+          city: body.city ?? undefined,
+          birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
+          gender: body.gender ?? undefined,
+          source: body.source ?? undefined,
+          status: body.status ?? undefined,
+          notes: body.notes ?? undefined,
+          ...(body.metadata && { metadata: JSON.stringify(body.metadata) }),
+        },
+      });
+    } else {
+      lead = await prisma.lead.create({
+        data: {
+          idNumber,
+          firstName: body.firstName,
+          lastName: body.lastName,
+          email: body.email || null,
+          phone: body.phone,
+          altPhone: body.altPhone,
+          address: body.address,
+          city: body.city,
+          birthDate: body.birthDate ? new Date(body.birthDate) : null,
+          gender: body.gender,
+          source: body.source,
+          status: body.status ?? "new",
+          notes: body.notes,
+          metadata: JSON.stringify(body.metadata ?? {}),
+          agentId: me.id,
+          agencyId: me.agencyId,
+        },
+      });
+    }
     return ok({ lead: serializeLead(lead) }, { status: 201 });
   } catch (error) {
     return handleError(error);
