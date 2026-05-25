@@ -69,6 +69,50 @@ Useful npm scripts:
 
 `npm start` (and the Docker / nixpacks containers) automatically run `prisma migrate deploy` and the seed before launching Next.js. Set `SKIP_SEED=1` to skip seeding.
 
+### Operator CLI (recover / create accounts)
+
+Run any of these inside the container (`railway run`, `docker exec`, or any
+shell where `node_modules` is installed). They talk directly to the same
+SQLite database the app uses, so they work even when the UI login is broken:
+
+| Script | What it does |
+|--------|--------------|
+| `npm run admin:list-users` | Print every user with role + last-login |
+| `npm run admin:reset-password -- <email> <newPassword>` | Hash + persist a new password (also re-enables disabled accounts) |
+| `npm run admin:create-admin -- <email> <password> [first] [last]` | Create or promote a `super_admin` |
+| `npm run admin:promote -- <email> <role>` | Change role (super_admin / admin / agency_owner / agent / sub_agent / client) |
+
+Useful when the seed didn't run, the demo password was rotated, or you just
+need a fresh admin in production. Example:
+
+```bash
+railway run npm run admin:create-admin -- you@example.com 'StrongPass!2026' Asaf Ashury
+railway run npm run admin:list-users
+```
+
+### Health & setup diagnostics
+
+`GET /api/health` now reports the runtime setup state and is the easiest way
+to debug a deployment:
+
+```json
+{
+  "status": "ok",
+  "setup": {
+    "databaseConnected": true,
+    "databaseUrlSet": true,
+    "userCount": 5,
+    "leadCount": 6,
+    "sessionSecretSource": "env",
+    "sessionSecretEnvSet": true
+  },
+  "warnings": []
+}
+```
+
+`status` is `degraded` (HTTP 503) when the DB is unreachable or has zero
+users. Any actionable misconfiguration shows up in `warnings`.
+
 ## Routes
 
 ### Pages
@@ -141,6 +185,23 @@ Uploaded documents and recordings are stored on disk under `./data/uploads/<rand
 Supported languages: **עברית** (Hebrew), **English**, **Русский** (Russian), **Français** (French), **العربية** (Arabic).
 
 Language can be changed from the header, sidebar, or profile settings page.
+
+### Sessions / login
+
+Sessions are signed with `SESSION_SECRET`. Recommended setup is to provide it
+via the platform's environment (32+ random bytes — `openssl rand -base64 32`).
+
+If `SESSION_SECRET` is **not** set in env, the app generates a random secret
+on first request and persists it under `./data/.session-secret` (mode `0600`).
+This is what keeps the login working on a clean Railway deploy without manual
+configuration; it also survives restarts as long as the data volume sticks
+around. The `warnings` field of `/api/health` will tell you when this fallback
+is in effect so you can promote it to a real env-managed secret.
+
+If neither the env var nor a writable data directory is available the app
+falls back to a process-lifetime random key — sessions then invalidate on
+every restart. Mount a volume on `/app/data` (or set `SESSION_SECRET`) to
+make this go away.
 
 ## Deployment
 
