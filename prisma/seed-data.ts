@@ -1,16 +1,18 @@
 // SEED DATA ONLY.
 //
-// This module previously powered the app at runtime. It is now exclusively
-// loaded by `prisma/seed.ts` to populate a fresh SQLite database with sample
-// agencies, users, policies, documents, regulatory snapshots, recordings,
-// marketplace products, etc. Do NOT import these constants from any UI or API
-// route — runtime data is read from the database via Prisma instead.
+// This module is loaded exclusively by `prisma/seed.ts` to populate a fresh
+// SQLite database with sample agencies, users, policies, documents,
+// regulatory snapshots, recordings, marketplace products, etc. It lives next
+// to the seed (instead of in `src/lib/`) so it always ships with the seed in
+// every build target — Docker, nixpacks / Railway, etc. — even when those
+// images strip the rest of `src/`. Do NOT import these constants from any UI
+// or API route — runtime data is read from the database via Prisma instead.
 
 import type {
   User, Agency, Policy, Document, Report, RegulatoryReport,
   Affiliate, BankConnection, InvestmentPortfolio, AIMessage,
   MaslakaData, HarBituachData, GamalNetData, Recording
-} from './types';
+} from '../src/lib/types';
 
 export const mockUsers: User[] = [
   {
