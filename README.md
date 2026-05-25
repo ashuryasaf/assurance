@@ -38,15 +38,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 ### Demo credentials
 
-All seeded users share the password **`Demo1234!`**:
-
-| Email | Role |
-|-------|------|
-| `admin@assurance.co.il` | Super admin |
-| `agency@assurance.co.il` | Agency owner |
-| `agent@assurance.co.il` | Agent |
-| `sub@assurance.co.il` | Sub-agent |
-| `demo@assurance.co.il` | Client (demo) |
+Demo accounts are seeded by `prisma/seed.ts`. See `.env.example` for the seed password variable (`SEED_DEMO_PASSWORD`). Do **not** commit real credentials.
 
 ## Database & migrations
 
