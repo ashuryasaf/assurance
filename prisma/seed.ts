@@ -302,7 +302,56 @@ async function main() {
     });
   }
 
-  // 13. Activity log seed
+  // 13. CRM sample leads (assigned to the demo agent in the demo agency).
+  console.log("[seed] Creating CRM leads ...");
+  const sampleLeads = [
+    {
+      idNumber: "111222333",
+      firstName: "ישראל",
+      lastName: "ישראלי",
+      email: "demo@assurance.co.il",
+      phone: "054-1112222",
+      city: "תל אביב",
+      status: "customer",
+      source: "demo",
+    },
+    {
+      idNumber: "987654321",
+      firstName: "משה",
+      lastName: "כהן",
+      email: "moshe@example.com",
+      phone: "050-7654321",
+      city: "ירושלים",
+      status: "qualified",
+      source: "lead-import",
+    },
+    {
+      idNumber: "555555555",
+      firstName: "שירה",
+      lastName: "לוי",
+      phone: "052-5555555",
+      city: "חיפה",
+      status: "new",
+      source: "lead-import",
+    },
+  ];
+  for (const l of sampleLeads) {
+    await prisma.lead.upsert({
+      where: { idNumber: l.idNumber },
+      create: { ...l, agentId: "2", agencyId: "ag1", metadata: "{}" },
+      update: {},
+    });
+  }
+  await prisma.leadCommunication.create({
+    data: {
+      leadId: (await prisma.lead.findUnique({ where: { idNumber: "987654321" } }))!.id,
+      channel: "phone",
+      direction: "outbound",
+      summary: "שיחת ייעוץ ראשונית - מתעניין בביטוח חיים משולב חיסכון",
+    },
+  });
+
+  // 14. Activity log seed
   console.log("[seed] Creating activity log ...");
   for (const act of mockActivity) {
     await prisma.activityLog.create({
@@ -315,7 +364,7 @@ async function main() {
     });
   }
 
-  // 14. AI conversation seed (for demo client)
+  // 15. AI conversation seed (for demo client)
   console.log("[seed] Creating AI conversation ...");
   await prisma.aIConversation.create({
     data: {
