@@ -1,17 +1,11 @@
 import { prisma } from "@/lib/db";
-import { requireRole, type CurrentUser } from "@/lib/dal";
+import { requireRole } from "@/lib/dal";
 import { handleError, ok, err } from "@/lib/api";
 import { parseCustomerFile, type ParsedRow } from "@/lib/crm/parse";
+import { canModifyLead } from "@/lib/scope";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_ROWS = 5000;
-
-function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
-  if (me.role === "super_admin" || me.role === "admin") return true;
-  if (me.agencyId && lead.agencyId === me.agencyId) return true;
-  if (lead.agentId === me.id) return true;
-  return false;
-}
 
 export async function GET() {
   try {

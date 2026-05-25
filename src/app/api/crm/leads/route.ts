@@ -4,13 +4,7 @@ import { requireRole, type CurrentUser } from "@/lib/dal";
 import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { serializeLead } from "@/lib/crm/serializers";
 import { normaliseIdNumber } from "@/lib/crm/parse";
-
-function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
-  if (me.role === "super_admin" || me.role === "admin") return true;
-  if (me.agencyId && lead.agencyId === me.agencyId) return true;
-  if (lead.agentId === me.id) return true;
-  return false;
-}
+import { canModifyLead } from "@/lib/scope";
 
 function leadScopeFilter(me: CurrentUser) {
   if (me.role === "super_admin" || me.role === "admin") return {};

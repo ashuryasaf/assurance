@@ -1,21 +1,29 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { handleError, ok, parseJSON, err } from "@/lib/api";
-import { HttpError, requireRole, type CurrentUser } from "@/lib/dal";
+import { HttpError, requireRole } from "@/lib/dal";
 import { normaliseIdNumber } from "@/lib/crm/parse";
-
-function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
-  if (me.role === "super_admin" || me.role === "admin") return true;
-  if (me.agencyId && lead.agencyId === me.agencyId) return true;
-  if (lead.agentId === me.id) return true;
-  return false;
-}
+import { canModifyLead } from "@/lib/scope";
 
 const patchSchema = z.object({
   status: z.enum(["new", "contacted", "scheduled", "qualified", "lost"]).optional(),
   assignedAgentId: z.string().nullable().optional(),
   notes: z.string().max(2000).optional(),
 });
+
+async function canAccessLandingLead(me: { role: string; id: string; agencyId?: string }, lead: { assignedAgentId: string | null }) {
+  if (me.role === "super_admin" || me.role === "admin") return true;
+  if (!lead.assignedAgentId) return true;
+  if (lead.assignedAgentId === me.id) return true;
+  if (me.role === "agency_owner" && me.agencyId) {
+    const assignedAgent = await prisma.user.findUnique({
+      where: { id: lead.assignedAgentId },
+      select: { agencyId: true },
+    });
+    return assignedAgent?.agencyId === me.agencyId;
+  }
+  return false;
+}
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -24,11 +32,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const lead = await prisma.realEstateLead.findUnique({ where: { id } });
     if (!lead) return err(404, "Lead not found");
 
-    if (me.role === "agent" || me.role === "sub_agent") {
-      // Agents can only touch their own / unassigned leads.
-      if (lead.assignedAgentId && lead.assignedAgentId !== me.id) {
-        throw new HttpError(403, "Lead is assigned to another agent");
-      }
+    if (!(await canAccessLandingLead(me, lead))) {
+      throw new HttpError(403, "Lead is assigned to another agent");
+    }
+
+    if (lead.status === "converted" || lead.convertedLeadId) {
+      return err(400, "Cannot modify a converted lead's status");
     }
 
     const body = await parseJSON(req, patchSchema);
@@ -67,10 +76,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const lead = await prisma.realEstateLead.findUnique({ where: { id } });
     if (!lead) return err(404, "Lead not found");
-    if (me.role === "agent" || me.role === "sub_agent") {
-      if (lead.assignedAgentId && lead.assignedAgentId !== me.id) {
-        throw new HttpError(403, "Lead is assigned to another agent");
-      }
+
+    if (!(await canAccessLandingLead(me, lead))) {
+      throw new HttpError(403, "Lead is assigned to another agent");
+    }
+
+    if (lead.status === "converted" || lead.convertedLeadId) {
+      return err(400, "Lead is already converted");
     }
 
     const body = await parseJSON(req, convertSchema);
@@ -118,6 +130,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         phone: lead.phone,
         email: lead.email ?? undefined,
         notes: lead.notes ?? undefined,
+        metadata: JSON.stringify({
+          campaignType: lead.campaignType,
+          preferredTime: lead.preferredTime,
+          utm: {
+            source: lead.utmSource,
+            medium: lead.utmMedium,
+            campaign: lead.utmCampaign,
+            term: lead.utmTerm,
+            content: lead.utmContent,
+          },
+          referrer: lead.referrer,
+          landingLeadId: lead.id,
+        }),
       },
     });
 

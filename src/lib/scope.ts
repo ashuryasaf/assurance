@@ -1,6 +1,13 @@
 import "server-only";
 import type { CurrentUser } from "@/lib/dal";
 
+export function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
+  if (me.role === "super_admin" || me.role === "admin") return true;
+  if (me.agencyId && lead.agencyId === me.agencyId) return true;
+  if (lead.agentId === me.id) return true;
+  return false;
+}
+
 // Returns the set of client IDs the user is allowed to read/write.
 // - clients: only themselves
 // - sub_agents/agents/agency_owners: clients in their agency (or themselves)

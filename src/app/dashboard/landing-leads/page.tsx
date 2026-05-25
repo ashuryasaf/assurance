@@ -266,7 +266,7 @@ export default function LandingLeadsPage() {
             <div style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e3a6e', marginBottom: '6px' }}>סטטוס:</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {STATUS_OPTIONS.map(s => (
+                {STATUS_OPTIONS.filter(s => s.key !== 'converted').map(s => (
                   <button
                     key={s.key}
                     disabled={busy || s.key === selected.status}
