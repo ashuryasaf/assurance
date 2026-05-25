@@ -1,4 +1,7 @@
 import "server-only";
+import path from "node:path";
+import fs from "node:fs";
+import { randomBytes } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
@@ -11,14 +14,91 @@ export type SessionPayload = {
   role: string;
 };
 
+export type SessionSecretSource = "env" | "persisted" | "ephemeral";
+
+let cachedKey: Uint8Array | null = null;
+let cachedSource: SessionSecretSource = "env";
+
+function persistedSecretPath(): string {
+  // The data directory is mounted as a Railway Volume in production, so a
+  // secret persisted here survives redeploys. Falls back to cwd/data on dev.
+  const root = process.env.DATA_DIR || path.resolve(process.cwd(), "data");
+  return path.join(root, ".session-secret");
+}
+
+function loadOrCreatePersistedSecret(): string {
+  const target = persistedSecretPath();
+  try {
+    if (fs.existsSync(target)) {
+      const value = fs.readFileSync(target, "utf8").trim();
+      if (value.length >= 16) {
+        cachedSource = "persisted";
+        return value;
+      }
+    }
+  } catch (err) {
+    console.warn("[session] could not read persisted secret:", (err as Error).message);
+  }
+
+  const generated = randomBytes(48).toString("base64");
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, generated, { mode: 0o600 });
+    fs.chmodSync(target, 0o600);
+    cachedSource = "persisted";
+    console.warn(
+      [
+        "",
+        "============================================================",
+        "[session] SESSION_SECRET is not set in the environment.",
+        `[session] A random secret has been generated and persisted to`,
+        `[session]   ${target}`,
+        "[session] Sessions will continue to work across restarts as long as",
+        "[session] this file (and the data volume) sticks around. For real",
+        "[session] production, set SESSION_SECRET via your platform's env",
+        "[session] (e.g. `openssl rand -base64 32`) and remove this file.",
+        "============================================================",
+        "",
+      ].join("\n"),
+    );
+    return generated;
+  } catch (err) {
+    cachedSource = "ephemeral";
+    console.warn(
+      [
+        "[session] Could not write a persisted secret to",
+        `         ${target}: ${(err as Error).message}`,
+        "[session] Falling back to a process-lifetime random key. All",
+        "[session] sessions will invalidate on the next restart.",
+        "[session] Set SESSION_SECRET via your platform's env to fix this.",
+      ].join("\n"),
+    );
+    return generated;
+  }
+}
+
 function getKey(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret || secret.length < 16) {
-    throw new Error(
-      "SESSION_SECRET environment variable is missing or too short. Generate one with `openssl rand -base64 32`.",
+  if (cachedKey) return cachedKey;
+  const fromEnv = process.env.SESSION_SECRET;
+  if (fromEnv && fromEnv.length >= 16) {
+    cachedSource = "env";
+    cachedKey = new TextEncoder().encode(fromEnv);
+    return cachedKey;
+  }
+  if (fromEnv && fromEnv.length > 0) {
+    console.warn(
+      `[session] SESSION_SECRET is set but only ${fromEnv.length} chars; need 16+. Falling back to a persisted secret.`,
     );
   }
-  return new TextEncoder().encode(secret);
+  const fallback = loadOrCreatePersistedSecret();
+  cachedKey = new TextEncoder().encode(fallback);
+  return cachedKey;
+}
+
+export function getSessionSecretSource(): SessionSecretSource {
+  // Force-initialise so cachedSource reflects reality.
+  void getKey();
+  return cachedSource;
 }
 
 export async function encryptSession(payload: SessionPayload): Promise<string> {
