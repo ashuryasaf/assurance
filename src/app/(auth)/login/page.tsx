@@ -29,12 +29,6 @@ export default function LoginPage() {
     setLoading(false);
   };
 
-  const demoAccounts = [
-    { email: 'admin@assurance.co.il', role: 'מנהל על', icon: '🔴' },
-    { email: 'agent@assurance.co.il', role: 'סוכן', icon: '🟢' },
-    { email: 'demo@assurance.co.il', role: 'לקוח', icon: '⚪' },
-  ];
-
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -87,23 +81,6 @@ export default function LoginPage() {
           <Link href="/register" style={{ color: '#2451a0', fontWeight: '600', textDecoration: 'none' }}>{t('registerHere')}</Link>
         </div>
 
-        <div style={{ marginTop: '24px', padding: '16px', background: '#f0f6ff', borderRadius: '12px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e3a6e', marginBottom: '10px' }}>
-            🔑 {t('demoCredentials')} (סיסמה: Demo1234!)
-          </div>
-          {demoAccounts.map(acc => (
-            <div key={acc.email}
-              onClick={() => { setEmail(acc.email); setPassword('Demo1234!'); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', cursor: 'pointer',
-                fontSize: '12px', color: '#6b7a9a',
-              }}>
-              <span>{acc.icon}</span>
-              <span style={{ fontWeight: '600' }}>{acc.email}</span>
-              <span>({acc.role})</span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
