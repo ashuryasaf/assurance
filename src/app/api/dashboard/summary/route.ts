@@ -19,7 +19,7 @@ export async function GET() {
       prisma.activityLog.findMany({
         where: ids
           ? { OR: [{ userId: { in: ids } }, { userId: null }] }
-          : { OR: [{ userId: me.id }, { userId: null }] },
+          : {},
         orderBy: { createdAt: "desc" },
         take: 10,
       }),

@@ -2,11 +2,14 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/dal";
 import { handleError, ok } from "@/lib/api";
 import { safeJSON } from "@/lib/json";
+import { hasPermission } from "@/lib/types";
 
 export async function GET() {
   try {
     const me = await requireUser();
-    // Restrict by agencyId if user is scoped to one
+    if (!me.agencyId && !hasPermission(me.role, "admin")) {
+      return ok({ agencies: [] });
+    }
     const where = me.agencyId ? { OR: [{ id: me.agencyId }, { parentAgencyId: me.agencyId }] } : {};
     const agencies = await prisma.agency.findMany({
       where,
