@@ -3,24 +3,19 @@ import path from "node:path";
 import bcrypt from "bcryptjs";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../src/generated/prisma/client";
-import {
-  mockUsers,
-  mockAgencies,
-  mockPolicies,
-  mockDocuments,
-  mockReports,
-  mockRegulatoryReports,
-  mockMaslakaData,
-  mockHarBituachData,
-  mockGamalNetData,
-  mockAffiliates,
-  mockBankConnections,
-  mockInvestmentPortfolio,
-  mockRecordings,
-  mockAIMessages,
-  mockProducts,
-  mockActivity,
-} from "../src/lib/mockData";
+type SeedData = typeof import("./seed-data");
+
+async function loadSeedData(): Promise<SeedData | null> {
+  try {
+    return (await import("./seed-data")) as SeedData;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[seed] could not load ./seed-data: ${msg}. Skipping seed (the app will start with an empty database — bootstrap an admin via \`npm run admin:create-admin\`).`,
+    );
+    return null;
+  }
+}
 
 function resolveSqliteUrl(): string {
   const url = process.env.DATABASE_URL;
@@ -47,6 +42,29 @@ function parseDate(value: string | undefined, fallback?: Date): Date {
 }
 
 async function main() {
+  const data = await loadSeedData();
+  if (!data) {
+    return;
+  }
+  const {
+    mockUsers,
+    mockAgencies,
+    mockPolicies,
+    mockDocuments,
+    mockReports,
+    mockRegulatoryReports,
+    mockMaslakaData,
+    mockHarBituachData,
+    mockGamalNetData,
+    mockAffiliates,
+    mockBankConnections,
+    mockInvestmentPortfolio,
+    mockRecordings,
+    mockAIMessages,
+    mockProducts,
+    mockActivity,
+  } = data;
+
   const existingUsers = await prisma.user.count();
   if (existingUsers > 0) {
     console.log(`[seed] Skipping seed: database already has ${existingUsers} users.`);
@@ -384,9 +402,17 @@ async function main() {
 
 main()
   .catch((err) => {
-    console.error("[seed] failed:", err);
-    process.exit(1);
+    // Never block startup on seed failures: if the seed crashes (missing
+    // sample-data file, schema drift, anything else) we log clearly and exit
+    // 0 so `scripts/start.mjs` can still launch Next.js. The operator can
+    // recover with `npm run admin:create-admin -- ...` if no users exist.
+    console.warn("[seed] skipping seed (non-fatal):", err?.message ?? err);
+    process.exitCode = 0;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    try {
+      await prisma.$disconnect();
+    } catch {
+      // ignore
+    }
   });
