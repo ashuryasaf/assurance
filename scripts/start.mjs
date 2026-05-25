@@ -23,12 +23,8 @@ function run(cmd, args, opts = {}) {
 }
 
 async function main() {
-  try {
-    console.log("[start] applying pending Prisma migrations ...");
-    await run("npx", ["prisma", "migrate", "deploy"]);
-  } catch (err) {
-    console.warn("[start] migrate deploy failed:", err.message);
-  }
+  console.log("[start] applying pending Prisma migrations ...");
+  await run("npx", ["prisma", "migrate", "deploy"]);
 
   if (!process.env.SKIP_SEED) {
     try {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireUser } from "@/lib/dal";
+import { requireUser, type CurrentUser } from "@/lib/dal";
+import { clientScopeIdsFor } from "@/lib/scope";
 import { handleError, ok, parseJSON } from "@/lib/api";
 
 const schema = z.object({
@@ -51,34 +52,44 @@ function classify(message: string): Topic {
   return "default";
 }
 
-async function buildResponse(userId: string, topic: Topic): Promise<string> {
+function clientWhereFilter(scopeIds: string[] | undefined): { clientId: string } | { clientId: { in: string[] } } | {} {
+  if (!scopeIds) return {};
+  if (scopeIds.length === 1) return { clientId: scopeIds[0] };
+  return { clientId: { in: scopeIds } };
+}
+
+async function buildResponse(user: CurrentUser, topic: Topic): Promise<string> {
+  const scopeIds = await clientScopeIdsFor(user);
+  const filter = clientWhereFilter(scopeIds);
+
   switch (topic) {
     case "policies": {
-      const policies = await prisma.policy.findMany({ where: { clientId: userId } });
+      const policies = await prisma.policy.findMany({ where: filter });
       const total = policies.reduce((s, p) => s + p.premium, 0);
       const types = new Set(policies.map((p) => p.type));
       return `יש לך ${policies.length} פוליסות (${Array.from(types).join(", ")}). פרמיה חודשית כוללת: ₪${total.toLocaleString()}.`;
     }
     case "regulatory": {
-      const reports = await prisma.regulatoryReport.findMany({ where: { clientId: userId } });
+      const reports = await prisma.regulatoryReport.findMany({ where: filter });
       if (reports.length === 0)
         return "טרם נטענו נתונים רגולטוריים. גש לעמוד 'הר הביטוח / מסלקה' כדי להתחיל.";
       const summary = reports.map((r) => `${r.type}: ${r.status}`).join(", ");
       return `נתונים רגולטוריים מעודכנים: ${summary}.`;
     }
     case "investments": {
-      const portfolio = await prisma.investmentPortfolio.findUnique({
-        where: { clientId: userId },
+      const portfolios = await prisma.investmentPortfolio.findMany({
+        where: filter,
         include: { investments: true },
       });
-      if (!portfolio) return "לא נמצא תיק השקעות עבורך.";
-      const totalReturns = portfolio.investments.reduce((s, i) => s + i.returns, 0);
-      return `תיק ההשקעות שלך: ₪${portfolio.totalValue.toLocaleString()}, רווח כולל: ₪${totalReturns.toLocaleString()}.`;
+      if (portfolios.length === 0) return "לא נמצא תיק השקעות עבורך.";
+      const totalValue = portfolios.reduce((s, p) => s + p.totalValue, 0);
+      const totalReturns = portfolios.flatMap((p) => p.investments).reduce((s, i) => s + i.returns, 0);
+      return `תיק ההשקעות שלך: ₪${totalValue.toLocaleString()}, רווח כולל: ₪${totalReturns.toLocaleString()}.`;
     }
     case "documents": {
       const counts = await prisma.document.groupBy({
         by: ["status"],
-        where: { clientId: userId },
+        where: filter,
         _count: { _all: true },
       });
       const labels = counts.map((c) => `${c.status}: ${c._count._all}`).join(", ");
@@ -86,7 +97,7 @@ async function buildResponse(userId: string, topic: Topic): Promise<string> {
       return `יש לך ${total} מסמכים. ${labels}.`;
     }
     case "affiliate": {
-      const affiliates = await prisma.affiliate.findMany({ where: { agentId: userId } });
+      const affiliates = await prisma.affiliate.findMany({ where: { agentId: user.id } });
       if (affiliates.length === 0) return "טרם הוגדרו שותפים.";
       const earnings = affiliates.reduce((s, a) => s + a.earnings, 0);
       const referrals = affiliates.reduce((s, a) => s + a.referrals, 0);
@@ -121,7 +132,7 @@ export async function POST(req: Request) {
       },
     });
 
-    const response = await buildResponse(me.id, classify(message));
+    const response = await buildResponse(me, classify(message));
     const assistant = await prisma.aIMessage.create({
       data: {
         conversationId: conversation.id,
