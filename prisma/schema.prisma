@@ -387,6 +387,7 @@ model RealEstateLead {
   email           String?
   preferredTime   String   // 'morning' | 'noon' | 'evening'
   notes           String?
+  campaignType    String   @default("real-estate") // 'real-estate' | 'insurance' | 'investments'
   source          String?  // free-text source label (e.g. campaign name)
   utmSource       String?
   utmMedium       String?
@@ -406,4 +407,5 @@ model RealEstateLead {
   @@index([createdAt])
   @@index([phone])
   @@index([email])
+  @@index([campaignType])
 }

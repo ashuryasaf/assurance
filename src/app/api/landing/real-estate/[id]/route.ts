@@ -94,11 +94,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         phone: lead.phone,
         email: lead.email,
         notes: lead.notes,
-        source: lead.source ?? "real-estate-landing",
+        source: lead.source ?? `${lead.campaignType}-landing`,
         status: "new",
         agentId: me.id,
         agencyId: me.agencyId ?? null,
         metadata: JSON.stringify({
+          campaignType: lead.campaignType,
           preferredTime: lead.preferredTime,
           utm: {
             source: lead.utmSource,

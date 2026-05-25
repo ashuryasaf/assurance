@@ -11,19 +11,19 @@ const TIME_SLOTS: { key: TimeSlot; label: string; hours: string; emoji: string }
 ];
 
 const HIGHLIGHTS = [
-  { icon: '🏙️', title: 'נכסים בלעדיים', body: 'גישה מוקדמת לפרויקטים שלא מפורסמים בפומבי – יד ראשונה, נדל"ן מניב והשקעות בחו"ל.' },
-  { icon: '📊', title: 'ניתוח שווי שוק', body: 'הערכת תשואה, מימון משלים והתאמה לפרופיל הסיכון שלך – לפני שאתה מתחייב.' },
-  { icon: '🤝', title: 'נציג אישי', body: 'אותו נציג מהשיחה הראשונה ועד החתימה. בלי מחזורי שיחות חוזרים, בלי הפתעות.' },
-  { icon: '🛡️', title: 'שקיפות מלאה', body: 'כל הנתונים, החוזים והמסמכים שלך זמינים בלוח בקרה דיגיטלי מאובטח.' },
+  { icon: '📈', title: 'תשואות מוכחות', body: 'גישה לקרנות נאמנות, תעודות סל ותיקי השקעה מנוהלים עם רקורד מוכח של תשואות.' },
+  { icon: '🏦', title: 'פנסיה והשתלמות', body: 'אופטימיזציה של קופות הגמל, קרנות ההשתלמות והפנסיה שלכם — חיסכון אלפי שקלים.' },
+  { icon: '🔍', title: 'ניתוח אישי', body: 'מיפוי פרופיל הסיכון, יעדי ההשקעה ולוח הזמנים שלכם לבניית תיק מותאם.' },
+  { icon: '💎', title: 'השקעות אלטרנטיביות', body: 'גישה להשקעות פרטיות, קרנות גידור ונדל"ן מניב שלא זמינות לציבור הרחב.' },
 ];
 
 const TESTIMONIALS = [
-  { quote: 'תוך שבועיים סגרנו דירה להשקעה במחיר שלא חשבנו שאפשרי. ליווי צמוד עד הקבלן.', author: 'יואב ושרית, רעננה' },
-  { quote: 'הציעו לנו 3 חלופות מותאמות לתקציב, לא ניסו "למכור" – פשוט ייעצו. סוף סוף.', author: 'מרים, חיפה' },
-  { quote: 'נציג אחד, אחראי על הכל. הכי הרגעת ראש שאפשר היה לקבל בעסקה כזו.', author: 'אסף, תל אביב' },
+  { quote: 'בזכות הייעוץ הצמוד הגדלנו את התשואה על תיק ההשקעות ב-18% תוך שנה.', author: 'אבי ונורית, הרצליה' },
+  { quote: 'גילינו שמשלמים דמי ניהול כפולים בפנסיה. החיסכון — מעל 200,000 ₪ לפנסיה.', author: 'שרון, רמת גן' },
+  { quote: 'השקעה ראשונה בחיים — הרגשנו בטוחים עם הליווי. היום התיק מניב 12% שנתי.', author: 'ליאת ויותם, תל אביב' },
 ];
 
-export default function RealEstateLandingPage() {
+export default function InvestmentsLandingPage() {
   const [form, setForm] = useState({
     fullName: '',
     phone: '',
@@ -37,8 +37,6 @@ export default function RealEstateLandingPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Capture UTM params + referrer once on mount so they ride along with the
-  // form payload. Useful for tracking which campaign sourced each lead.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -73,8 +71,8 @@ export default function RealEstateLandingPage() {
           email: form.email || undefined,
           preferredTime: form.preferredTime,
           notes: form.notes || undefined,
-          campaignType: 'real-estate',
-          source: 'real-estate-landing',
+          campaignType: 'investments',
+          source: 'investments-landing',
           referrer,
           utm,
           consent: true,
@@ -103,7 +101,6 @@ export default function RealEstateLandingPage() {
 
   return (
     <main style={{ minHeight: '100vh', background: '#f5f7fc', color: '#1e3a6e', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      {/* HERO */}
       <section
         style={{
           ...heroBackground,
@@ -118,22 +115,22 @@ export default function RealEstateLandingPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', color: '#dae8f8' }}>
               <span style={{ fontSize: '28px' }}>🛡️</span>
-              <span style={{ fontSize: '14px', fontWeight: 700, letterSpacing: '0.04em' }}>Assurance · נדל&quot;ן</span>
+              <span style={{ fontSize: '14px', fontWeight: 700, letterSpacing: '0.04em' }}>Assurance · השקעות</span>
             </div>
             <h1 style={{ fontSize: '44px', fontWeight: 800, lineHeight: 1.15, marginBottom: '20px' }}>
-              הזדמנויות נדל&quot;ן ייחודיות, <br />
-              <span style={{ color: '#d4b44a' }}>במחיר ובזמן שמתאים לכם.</span>
+              הזדמנויות השקעה בלעדיות, <br />
+              <span style={{ color: '#d4b44a' }}>תשואות שעובדות בשבילכם.</span>
             </h1>
             <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.85)', maxWidth: '540px', lineHeight: 1.6, marginBottom: '32px' }}>
-              דירות יד ראשונה, נכסים מניבים, השקעות בחו&quot;ל ופרויקטים בלעדיים — מותאמים לפרופיל ההשקעה שלכם.
-              השאירו פרטים ונציג בכיר יחזור אליכם בזמן שמתאים לכם.
+              קרנות נאמנות, תיקי השקעות מנוהלים, פנסיה, קרנות השתלמות והשקעות אלטרנטיביות —
+              השאירו פרטים ונציג השקעות יחזור אליכם בזמן שמתאים.
             </p>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', marginBottom: '36px' }}>
               {[
-                ['🏘️', '+1,200 לקוחות', 'תיק אישי'],
+                ['📈', '₪2.5B+', 'נכסים מנוהלים'],
                 ['📞', '24 שעות', 'זמן מענה'],
-                ['🔒', '100%', 'דיסקרטיות'],
+                ['🏆', '15+ שנות', 'ניסיון'],
               ].map(([icon, big, small]) => (
                 <div key={small} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontSize: '28px' }}>{icon}</span>
@@ -150,11 +147,10 @@ export default function RealEstateLandingPage() {
               background: 'linear-gradient(135deg, #c9a227, #a87c1a)', color: 'white',
               textDecoration: 'none', fontWeight: 800, fontSize: '16px', boxShadow: '0 12px 32px rgba(201,162,39,0.35)',
             }}>
-              קבלו הצעה אישית →
+              קבלו ייעוץ השקעות אישי →
             </a>
           </div>
 
-          {/* Form card */}
           <FormCard
             id="contact-form"
             form={form}
@@ -163,11 +159,12 @@ export default function RealEstateLandingPage() {
             submitting={submitting}
             success={success}
             error={error}
+            successMessage="תודה! קיבלנו את הפנייה. יועץ השקעות בכיר יחזור אליך תוך 24 שעות, בזמן שביקשת."
+            ctaLabel="שלחו לי הצעת השקעה"
           />
         </div>
       </section>
 
-      {/* HIGHLIGHTS */}
       <section style={{ maxWidth: '1180px', margin: '-56px auto 0', padding: '0 24px' }}>
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px',
@@ -184,17 +181,16 @@ export default function RealEstateLandingPage() {
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
       <section style={{ maxWidth: '1180px', margin: '64px auto 0', padding: '0 24px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: 800, color: '#1e3a6e', marginBottom: '24px', textAlign: 'center' }}>
           איך התהליך עובד?
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           {[
-            ['1', '📩 השארת פרטים', 'ממלאים את הטופס בעמוד הזה - שם, טלפון ושעה נוחה.'],
-            ['2', '☎️ שיחת היכרות', 'נציג אישי יחזור אליכם בזמן שביקשתם, ללא ספאם.'],
-            ['3', '🏘️ הצעות מותאמות', 'נשלח 2-3 הצעות שתואמות את התקציב והפרופיל שלכם.'],
-            ['4', '🤝 ליווי עד החתימה', 'מימון, משא ומתן וביקורת — אנחנו לצידכם.'],
+            ['1', '📩 השארת פרטים', 'ממלאים את הטופס — שם, טלפון ושעה נוחה.'],
+            ['2', '☎️ שיחת היכרות', 'יועץ השקעות מוסמך ימפה את הצרכים ופרופיל הסיכון.'],
+            ['3', '📊 תכנית מותאמת', 'נבנה תיק מגוון שמתאים ליעדים הפיננסיים שלכם.'],
+            ['4', '📈 ליווי שוטף', 'מעקב תשואות, איזון מחדש ודוחות תקופתיים.'],
           ].map(([n, title, body]) => (
             <div key={n} style={{
               background: 'white', borderRadius: '16px', padding: '20px',
@@ -208,7 +204,6 @@ export default function RealEstateLandingPage() {
         </div>
       </section>
 
-      {/* TESTIMONIALS */}
       <section style={{ maxWidth: '1180px', margin: '64px auto 0', padding: '0 24px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: 800, color: '#1e3a6e', marginBottom: '24px', textAlign: 'center' }}>
           לקוחות מדברים
@@ -219,7 +214,7 @@ export default function RealEstateLandingPage() {
               background: 'white', borderRadius: '16px', padding: '24px',
               boxShadow: '0 8px 24px rgba(15,34,68,0.06)',
             }}>
-              <div style={{ fontSize: '32px', color: '#c9a227', marginBottom: '6px' }}>“</div>
+              <div style={{ fontSize: '32px', color: '#c9a227', marginBottom: '6px' }}>&ldquo;</div>
               <div style={{ fontSize: '15px', color: '#1e3a6e', lineHeight: 1.6, marginBottom: '12px' }}>{t.quote}</div>
               <div style={{ fontSize: '13px', color: '#52668c', fontWeight: 600 }}>— {t.author}</div>
             </div>
@@ -227,16 +222,15 @@ export default function RealEstateLandingPage() {
         </div>
       </section>
 
-      {/* CTA */}
       <section style={{ maxWidth: '720px', margin: '64px auto', padding: '40px 24px', textAlign: 'center' }}>
         <div style={{
           background: 'linear-gradient(135deg, #1e3a6e, #2451a0)',
           color: 'white', padding: '36px 24px', borderRadius: '20px',
           boxShadow: '0 24px 60px rgba(15,34,68,0.18)',
         }}>
-          <h3 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '10px' }}>מוכנים להתקדם?</h3>
+          <h3 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '10px' }}>מוכנים להשקיע נכון?</h3>
           <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.85)', marginBottom: '20px' }}>
-            דקה למילוי, נציג חוזר אליכם בזמן הנוח לכם.
+            דקה למילוי, יועץ השקעות חוזר אליכם בזמן הנוח.
           </p>
           <a href="#contact-form" style={{
             display: 'inline-block', padding: '14px 28px', borderRadius: '12px',
@@ -247,9 +241,8 @@ export default function RealEstateLandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer style={{ textAlign: 'center', padding: '28px 16px 48px', color: '#6b7a9a', fontSize: '12px' }}>
-        © {new Date().getFullYear()} Assurance · אין מדובר בייעוץ או הצעת רכישה. הפנייה תיענה תוך 24 שעות בימי עסקים.
+        © {new Date().getFullYear()} Assurance · אין מדובר בייעוץ השקעות. הפנייה תיענה תוך 24 שעות בימי עסקים.
       </footer>
 
       <style jsx>{`
@@ -271,6 +264,8 @@ function FormCard({
   submitting,
   success,
   error,
+  successMessage,
+  ctaLabel,
 }: {
   id: string;
   form: {
@@ -286,6 +281,8 @@ function FormCard({
   submitting: boolean;
   success: boolean;
   error: string | null;
+  successMessage: string;
+  ctaLabel: string;
 }) {
   if (success) {
     return (
@@ -293,9 +290,7 @@ function FormCard({
         <div style={{ textAlign: 'center', padding: '20px 8px' }}>
           <div style={{ fontSize: '52px', marginBottom: '12px' }}>✅</div>
           <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1e3a6e', marginBottom: '8px' }}>תודה! קיבלנו את הפנייה.</h2>
-          <p style={{ color: '#52668c', fontSize: '14px', lineHeight: 1.7 }}>
-            נציג נדל&quot;ן בכיר יחזור אליך תוך 24 שעות, בזמן שביקשת.
-          </p>
+          <p style={{ color: '#52668c', fontSize: '14px', lineHeight: 1.7 }}>{successMessage}</p>
         </div>
       </div>
     );
@@ -313,11 +308,11 @@ function FormCard({
           padding: '10px 14px', borderRadius: '10px', background: '#fce4ec',
           color: '#c62828', fontSize: '13px', fontWeight: 600, marginBottom: '12px',
         }}>
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
-      <Field label="שם מלא *">
+      <FieldWrapper label="שם מלא *">
         <input
           required
           value={form.fullName}
@@ -326,9 +321,9 @@ function FormCard({
           placeholder="ישראל ישראלי"
           style={inputStyle}
         />
-      </Field>
+      </FieldWrapper>
 
-      <Field label="טלפון נייד *">
+      <FieldWrapper label="טלפון נייד *">
         <input
           required
           type="tel"
@@ -339,9 +334,9 @@ function FormCard({
           placeholder="050-1234567"
           style={inputStyle}
         />
-      </Field>
+      </FieldWrapper>
 
-      <Field label="אימייל">
+      <FieldWrapper label="אימייל">
         <input
           type="email"
           autoComplete="email"
@@ -350,7 +345,7 @@ function FormCard({
           placeholder="you@example.com"
           style={inputStyle}
         />
-      </Field>
+      </FieldWrapper>
 
       <div style={{ marginBottom: '14px' }}>
         <label style={labelStyle}>שעה מועדפת לפנייה *</label>
@@ -379,15 +374,15 @@ function FormCard({
         </div>
       </div>
 
-      <Field label="הערות (לא חובה)">
+      <FieldWrapper label="מה מעניין אתכם? (לא חובה)">
         <textarea
           value={form.notes}
           onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
           rows={3}
-          placeholder="ספרו לנו על מה שמעניין אתכם — סוג נכס, אזור, תקציב..."
+          placeholder="סוג השקעה, סכום, טווח זמן, רמת סיכון..."
           style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }}
         />
-      </Field>
+      </FieldWrapper>
 
       <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#52668c', marginBottom: '16px', cursor: 'pointer' }}>
         <input
@@ -410,17 +405,17 @@ function FormCard({
         boxShadow: submitting ? 'none' : '0 12px 32px rgba(30,58,110,0.25)',
         transition: 'all 0.15s',
       }}>
-        {submitting ? 'שולח...' : 'שלחו לי הצעה אישית'}
+        {submitting ? 'שולח...' : ctaLabel}
       </button>
 
       <div style={{ marginTop: '12px', fontSize: '11px', color: '#6b7a9a', textAlign: 'center' }}>
-        🔒 הפרטים שלכם מאובטחים ולא יועברו לצד שלישי.
+        הפרטים שלכם מאובטחים ולא יועברו לצד שלישי.
       </div>
     </form>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldWrapper({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: '12px' }}>
       <label style={labelStyle}>{label}</label>

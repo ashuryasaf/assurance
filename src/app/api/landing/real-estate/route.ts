@@ -4,6 +4,8 @@ import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { requireRole } from "@/lib/dal";
 import { checkRate, clientIp } from "@/lib/throttle";
 
+const CAMPAIGN_TYPES = ["real-estate", "insurance", "investments"] as const;
+
 const submissionSchema = z.object({
   fullName: z.string().trim().min(2, "נדרש שם מלא").max(80),
   phone: z
@@ -21,6 +23,7 @@ const submissionSchema = z.object({
     .or(z.literal("")),
   preferredTime: z.enum(["morning", "noon", "evening"]),
   notes: z.string().trim().max(800).optional(),
+  campaignType: z.enum(CAMPAIGN_TYPES).optional(),
   source: z.string().trim().max(60).optional(),
   utm: z
     .object({
@@ -44,6 +47,14 @@ export async function POST(req: Request) {
 
     const body = await parseJSON(req, submissionSchema);
     const userAgent = req.headers.get("user-agent")?.slice(0, 255) ?? null;
+    const campaignType = body.campaignType ?? "real-estate";
+
+    const CAMPAIGN_DEFAULTS: Record<string, { source: string; icon: string; label: string }> = {
+      "real-estate": { source: "real-estate-landing", icon: "🏘️", label: "נדל\"ן" },
+      insurance: { source: "insurance-landing", icon: "🛡️", label: "ביטוח" },
+      investments: { source: "investments-landing", icon: "📈", label: "השקעות" },
+    };
+    const defaults = CAMPAIGN_DEFAULTS[campaignType] ?? CAMPAIGN_DEFAULTS["real-estate"];
 
     const created = await prisma.realEstateLead.create({
       data: {
@@ -52,7 +63,8 @@ export async function POST(req: Request) {
         email: body.email && body.email.length > 0 ? body.email.toLowerCase() : null,
         preferredTime: body.preferredTime,
         notes: body.notes && body.notes.length > 0 ? body.notes : null,
-        source: body.source ?? "real-estate-landing",
+        campaignType,
+        source: body.source ?? defaults.source,
         utmSource: body.utm?.source,
         utmMedium: body.utm?.medium,
         utmCampaign: body.utm?.campaign,
@@ -68,8 +80,8 @@ export async function POST(req: Request) {
     await prisma.activityLog.create({
       data: {
         type: "landing",
-        message: `פנייה חדשה מהדף הנחיתה: ${body.fullName}`,
-        icon: "🏘️",
+        message: `פנייה חדשה מדף הנחיתה (${defaults.label}): ${body.fullName}`,
+        icon: defaults.icon,
       },
     });
 
@@ -92,8 +104,10 @@ export async function GET(req: Request) {
     const me = await requireRole("agent");
     const url = new URL(req.url);
     const status = url.searchParams.get("status");
+    const campaignTypeFilter = url.searchParams.get("campaignType");
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
+    if (campaignTypeFilter) where.campaignType = campaignTypeFilter;
     if (me.role !== "super_admin" && me.role !== "admin") {
       if (me.role === "agency_owner" && me.agencyId) {
         const agencyAgents = await prisma.user.findMany({
@@ -119,6 +133,7 @@ export async function GET(req: Request) {
         email: l.email ?? undefined,
         preferredTime: l.preferredTime,
         notes: l.notes ?? undefined,
+        campaignType: l.campaignType,
         source: l.source ?? undefined,
         status: l.status,
         utm: {

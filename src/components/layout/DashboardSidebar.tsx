@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   { key: 'esign', href: '/dashboard/esign', icon: '✍️' },
   { key: 'ai_assistant', href: '/dashboard/ai-assistant', icon: '🤖' },
   { key: 'crm', href: '/dashboard/crm', icon: '📇', requiredRole: 'agent' },
-  { key: 'landing_leads', href: '/dashboard/landing-leads', icon: '🏘️', requiredRole: 'agent' },
+  { key: 'landing_leads', href: '/dashboard/landing-leads', icon: '📋', requiredRole: 'agent' },
   { key: 'agency', href: '/dashboard/agency', icon: '🏢', requiredRole: 'agent' },
   { key: 'affiliates', href: '/dashboard/affiliates', icon: '🤝', requiredRole: 'agent' },
   { key: 'banking', href: '/dashboard/banking', icon: '🏦' },
