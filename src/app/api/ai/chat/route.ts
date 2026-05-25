@@ -52,7 +52,7 @@ function classify(message: string): Topic {
   return "default";
 }
 
-function clientWhereFilter(scopeIds: string[] | undefined): { clientId: string } | { clientId: { in: string[] } } | {} {
+function clientWhereFilter(scopeIds: string[] | undefined): { clientId?: string | { in: string[] } } {
   if (!scopeIds) return {};
   if (scopeIds.length === 1) return { clientId: scopeIds[0] };
   return { clientId: { in: scopeIds } };
