@@ -1,10 +1,18 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { handleError, ok, parseJSON, err } from "@/lib/api";
-import { HttpError, requireRole } from "@/lib/dal";
+import { HttpError, requireRole, type CurrentUser } from "@/lib/dal";
+import { normaliseIdNumber } from "@/lib/crm/parse";
+
+function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
+  if (me.role === "super_admin" || me.role === "admin") return true;
+  if (me.agencyId && lead.agencyId === me.agencyId) return true;
+  if (lead.agentId === me.id) return true;
+  return false;
+}
 
 const patchSchema = z.object({
-  status: z.enum(["new", "contacted", "scheduled", "qualified", "converted", "lost"]).optional(),
+  status: z.enum(["new", "contacted", "scheduled", "qualified", "lost"]).optional(),
   assignedAgentId: z.string().nullable().optional(),
   notes: z.string().max(2000).optional(),
 });
@@ -66,7 +74,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const body = await parseJSON(req, convertSchema);
-    const idNumberDigits = body.idNumber.replace(/[^\d]/g, "").padStart(9, "0");
+    const idNumberDigits = normaliseIdNumber(body.idNumber);
+    if (!idNumberDigits) return err(400, "Invalid Israeli ID number");
+
+    const existingCrmLead = await prisma.lead.findUnique({ where: { idNumber: idNumberDigits } });
+    if (existingCrmLead && !canModifyLead(me, existingCrmLead)) {
+      return err(403, "Lead belongs to another tenant");
+    }
+
     const [firstName, ...rest] = lead.fullName.trim().split(/\s+/);
     const lastName = rest.join(" ") || undefined;
 

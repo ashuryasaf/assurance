@@ -95,8 +95,16 @@ export async function GET(req: Request) {
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (me.role !== "super_admin" && me.role !== "admin") {
-      // Limit to leads in their agency or unassigned ones, scoped by their id.
-      where.OR = [{ assignedAgentId: me.id }, { assignedAgentId: null }];
+      if (me.role === "agency_owner" && me.agencyId) {
+        const agencyAgents = await prisma.user.findMany({
+          where: { agencyId: me.agencyId },
+          select: { id: true },
+        });
+        const agentIds = agencyAgents.map((a) => a.id);
+        where.OR = [{ assignedAgentId: { in: agentIds } }, { assignedAgentId: null }];
+      } else {
+        where.OR = [{ assignedAgentId: me.id }, { assignedAgentId: null }];
+      }
     }
     const leads = await prisma.realEstateLead.findMany({
       where,

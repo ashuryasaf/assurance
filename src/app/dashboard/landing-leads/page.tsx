@@ -57,12 +57,16 @@ export default function LandingLeadsPage() {
     setActionError(null);
     setBusy(true);
     try {
-      await apiFetch(`/api/landing/real-estate/${lead.id}`, {
+      const res = await apiFetch(`/api/landing/real-estate/${lead.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
       await refresh();
+      const updated = (res as { lead?: { status: string } })?.lead;
+      if (selected && selected.id === lead.id) {
+        setSelected({ ...selected, status: (updated?.status ?? status) as RealEstateLead['status'] });
+      }
     } catch (err) {
       setActionError((err as Error).message);
     } finally {
