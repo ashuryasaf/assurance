@@ -49,9 +49,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
 COPY --from=builder --chown=nextjs:nodejs /app/next.config.ts ./next.config.ts
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 
-# Runtime data dir (SQLite DB + uploads). Use a Docker volume in production.
+# Runtime data dir (SQLite DB + uploads). On Railway attach a Railway Volume
+# at /app/data; on plain Docker pass `-v ashuri-data:/app/data`. The Docker
+# `VOLUME` directive is intentionally omitted because Railway rejects it.
 RUN mkdir -p /app/data /app/data/uploads && chown -R nextjs:nodejs /app/data
-VOLUME ["/app/data"]
 
 USER nextjs
 EXPOSE 3000

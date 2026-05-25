@@ -154,6 +154,11 @@ docker run -p 3000:3000 \
   ashuri
 ```
 
+The image intentionally does **not** declare a Docker `VOLUME` instruction
+because Railway rejects that directive at build validation time. Mount
+persistence yourself: pass `-v <name>:/app/data` to `docker run`, or attach a
+Railway Volume on the `/app/data` path.
+
 ### Railway / nixpacks
 
-`nixpacks.toml` calls `node scripts/start.mjs`, which runs `prisma migrate deploy` + `db:seed` (idempotent) before starting Next.js. Set `SESSION_SECRET` (and optionally `DATABASE_URL`) in the project's environment, then mount a persistent volume on `/app/data` if you want uploaded files and the SQLite DB to survive deploys.
+`nixpacks.toml` calls `node scripts/start.mjs`, which runs `prisma migrate deploy` + `db:seed` (idempotent) before starting Next.js. Set `SESSION_SECRET` (and optionally `DATABASE_URL`) in the project's environment, then attach a **Railway Volume** mounted at `/app/data` so uploaded files and the SQLite DB survive deploys (do not use a Dockerfile `VOLUME` directive — Railway rejects it during build validation).
