@@ -1,7 +1,13 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockRegulatoryReports, mockMaslakaData, mockHarBituachData, mockGamalNetData } from '@/lib/mockData';
+import { apiFetch, useApi } from '@/lib/client-api';
+import type {
+  RegulatoryReport,
+  MaslakaData,
+  HarBituachData,
+  GamalNetData,
+} from '@/lib/types';
 import { useState } from 'react';
 
 type TabType = 'maslaka' | 'har_bituach' | 'gamal_net';
@@ -10,6 +16,9 @@ export default function RegulatoryPage() {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>('maslaka');
   const [loading, setLoading] = useState(false);
+  const { data, refresh, error } = useApi<{ reports: RegulatoryReport[] }>('/api/regulatory');
+  const reports = data?.reports ?? [];
+  const report = reports.find(r => r.type === activeTab);
 
   const tabs = [
     { key: 'maslaka' as TabType, label: t('maslakaTitle'), icon: '🏦', desc: t('maslakaDesc') },
@@ -17,12 +26,25 @@ export default function RegulatoryPage() {
     { key: 'gamal_net' as TabType, label: t('gamalNet'), icon: '💼', desc: t('gamalNetDesc') },
   ];
 
-  const handleFetch = () => {
+  const handleFetch = async () => {
     setLoading(true);
-    setTimeout(() => setLoading(false), 2000);
+    try {
+      await apiFetch('/api/regulatory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: activeTab }),
+      });
+      await refresh();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const report = mockRegulatoryReports.find(r => r.type === activeTab);
+  const maslaka = activeTab === 'maslaka' ? (report?.data as MaslakaData | undefined) : undefined;
+  const harBituach = activeTab === 'har_bituach' ? (report?.data as HarBituachData | undefined) : undefined;
+  const gamalNet = activeTab === 'gamal_net' ? (report?.data as GamalNetData | undefined) : undefined;
 
   return (
     <div className="animate-fadeIn" style={{ maxWidth: '1400px', margin: '0 auto' }}>
@@ -33,7 +55,12 @@ export default function RegulatoryPage() {
         <p style={{ color: '#6b7a9a', fontSize: '15px' }}>{t('regulatorySubtitle')}</p>
       </div>
 
-      {/* Tab Navigation */}
+      {error && (
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#fce4ec', color: '#c62828', marginBottom: '16px' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {tabs.map(tab => (
           <button
@@ -57,7 +84,6 @@ export default function RegulatoryPage() {
         ))}
       </div>
 
-      {/* Fetch Button */}
       <div style={{ marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
         <button
           onClick={handleFetch}
@@ -75,22 +101,26 @@ export default function RegulatoryPage() {
             {t('lastUpdate')}: {report.fetchedAt}
           </span>
         )}
+        {!report && !loading && (
+          <span style={{ color: '#856404', fontSize: '13px' }}>
+            עדיין לא נטענו נתונים. לחץ על כפתור הסנכרון.
+          </span>
+        )}
       </div>
 
-      {/* Content based on tab */}
-      {activeTab === 'maslaka' && (
+      {activeTab === 'maslaka' && maslaka && (
         <div>
           <div className="card" style={{ padding: '20px', marginBottom: '16px', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', borderRadius: '14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '14px', opacity: 0.8 }}>{t('totalSavings')}</div>
-                <div style={{ fontSize: '32px', fontWeight: '800' }}>₪{mockMaslakaData.totalSavings.toLocaleString()}</div>
+                <div style={{ fontSize: '32px', fontWeight: '800' }}>₪{(maslaka.totalSavings ?? 0).toLocaleString()}</div>
               </div>
               <span style={{ fontSize: '48px' }}>🏦</span>
             </div>
           </div>
 
-          {mockMaslakaData.pensionFunds.map((fund, i) => (
+          {(maslaka.pensionFunds ?? []).map((fund, i) => (
             <div key={i} className="card" style={{ padding: '20px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                 <div>
@@ -100,27 +130,22 @@ export default function RegulatoryPage() {
                 <div style={{ fontSize: '22px', fontWeight: '800', color: '#1e3a6e' }}>₪{fund.balance.toLocaleString()}</div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-                <div style={{ padding: '10px', background: '#f0f6ff', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{t('monthlyContribution')}</div>
-                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e3a6e' }}>₪{fund.monthlyContribution.toLocaleString()}</div>
-                </div>
-                <div style={{ padding: '10px', background: '#f0f6ff', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '11px', color: '#6b7a9a' }}>הפקדת מעסיק</div>
-                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e3a6e' }}>₪{fund.employerContribution.toLocaleString()}</div>
-                </div>
-                <div style={{ padding: '10px', background: '#f0f6ff', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{t('managementFee')}</div>
-                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e3a6e' }}>{fund.managementFee}%</div>
-                </div>
-                <div style={{ padding: '10px', background: '#f0f6ff', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{t('investmentTrack')}</div>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e3a6e' }}>{fund.investmentTrack}</div>
-                </div>
+                {[
+                  { label: t('monthlyContribution'), value: `₪${fund.monthlyContribution.toLocaleString()}` },
+                  { label: 'הפקדת מעסיק', value: `₪${fund.employerContribution.toLocaleString()}` },
+                  { label: t('managementFee'), value: `${fund.managementFee}%` },
+                  { label: t('investmentTrack'), value: fund.investmentTrack },
+                ].map(c => (
+                  <div key={c.label} style={{ padding: '10px', background: '#f0f6ff', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{c.label}</div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e3a6e' }}>{c.value}</div>
+                  </div>
+                ))}
               </div>
               <div style={{ marginTop: '12px' }}>
                 <div style={{ fontSize: '13px', fontWeight: '600', color: '#6b7a9a', marginBottom: '6px' }}>תשואות:</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {fund.returns.map(r => (
+                  {(fund.returns ?? []).map(r => (
                     <div key={r.year} style={{
                       padding: '6px 12px', borderRadius: '8px', fontSize: '12px',
                       background: r.percentage >= 0 ? '#e8f5e9' : '#fce4ec',
@@ -137,13 +162,13 @@ export default function RegulatoryPage() {
         </div>
       )}
 
-      {activeTab === 'har_bituach' && (
+      {activeTab === 'har_bituach' && harBituach && (
         <div>
           <div className="card" style={{ padding: '20px', marginBottom: '16px', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', borderRadius: '14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '14px', opacity: 0.8 }}>{t('totalPremiumLabel')}</div>
-                <div style={{ fontSize: '32px', fontWeight: '800' }}>₪{mockHarBituachData.totalPremium.toLocaleString()}/חודש</div>
+                <div style={{ fontSize: '32px', fontWeight: '800' }}>₪{(harBituach.totalPremium ?? 0).toLocaleString()}/חודש</div>
               </div>
               <span style={{ fontSize: '48px' }}>🏔️</span>
             </div>
@@ -154,14 +179,12 @@ export default function RegulatoryPage() {
               <thead>
                 <tr>
                   {[t('policyNumber'), 'חברה', 'סוג', t('status'), t('premium'), t('startDate'), t('endDate'), 'פרטי כיסוי'].map(h => (
-                    <th key={h} style={{ padding: '12px 16px', background: '#f0f6ff', color: '#1e3a6e', fontWeight: '700', fontSize: '13px', textAlign: 'start', whiteSpace: 'nowrap' }}>
-                      {h}
-                    </th>
+                    <th key={h} style={{ padding: '12px 16px', background: '#f0f6ff', color: '#1e3a6e', fontWeight: '700', fontSize: '13px', textAlign: 'start', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {mockHarBituachData.policies.map((p, i) => (
+                {(harBituach.policies ?? []).map((p, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600' }}>{p.policyNumber}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px' }}>{p.company}</td>
@@ -183,19 +206,19 @@ export default function RegulatoryPage() {
         </div>
       )}
 
-      {activeTab === 'gamal_net' && (
+      {activeTab === 'gamal_net' && gamalNet && (
         <div>
           <div className="card" style={{ padding: '20px', marginBottom: '16px', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', borderRadius: '14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '14px', opacity: 0.8 }}>{t('totalBalance')}</div>
-                <div style={{ fontSize: '32px', fontWeight: '800' }}>₪{mockGamalNetData.totalBalance.toLocaleString()}</div>
+                <div style={{ fontSize: '32px', fontWeight: '800' }}>₪{(gamalNet.totalBalance ?? 0).toLocaleString()}</div>
               </div>
               <span style={{ fontSize: '48px' }}>💼</span>
             </div>
           </div>
 
-          {mockGamalNetData.accounts.map((acc, i) => (
+          {(gamalNet.accounts ?? []).map((acc, i) => (
             <div key={i} className="card" style={{ padding: '20px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                 <div>
@@ -234,8 +257,7 @@ export default function RegulatoryPage() {
         </div>
       )}
 
-      {/* AI Insights */}
-      {report?.aiInsights && (
+      {report?.aiInsights && report.aiInsights.length > 0 && (
         <div className="card" style={{ padding: '20px', marginTop: '20px', borderInlineStart: '4px solid #c9a227' }}>
           <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             🤖 {t('aiInsights')}

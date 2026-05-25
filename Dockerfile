@@ -1,11 +1,13 @@
 FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat python3 make g++ openssl
 
 # ---- Dependencies ----
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npm ci
 
 # ---- Build ----
 FROM base AS builder
@@ -13,34 +15,45 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Force cache invalidation - add current timestamp
 ARG BUILD_DATE=unknown
 RUN echo "Build date: $BUILD_DATE"
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Force a placeholder DATABASE_URL during build (Prisma generate only).
+ENV DATABASE_URL="file:./data/app.db"
 
+RUN npx prisma generate
 RUN npm run build
 
-# ---- Production ----
+# ---- Runtime ----
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+ENV DATABASE_URL="file:./data/app.db"
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.ts ./next.config.ts
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+
+# Runtime data dir (SQLite DB + uploads). Use a Docker volume in production.
+RUN mkdir -p /app/data /app/data/uploads && chown -R nextjs:nodejs /app/data
+VOLUME ["/app/data"]
 
 USER nextjs
-
 EXPOSE 3000
 
-ENV PORT=3000
-
-CMD ["node", "server.js"]
+CMD ["node", "scripts/start.mjs"]

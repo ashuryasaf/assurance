@@ -1,15 +1,48 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockAffiliates } from '@/lib/mockData';
+import { apiFetch, useApi } from '@/lib/client-api';
 import { useState } from 'react';
+import type { Affiliate } from '@/lib/types';
 
 export default function AffiliatesPage() {
   const { t } = useLanguage();
   const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: '', code: '', commissionRate: '10' });
+  const { data, refresh, error, loading } = useApi<{ affiliates: Affiliate[] }>('/api/affiliates');
+  const affiliates = data?.affiliates ?? [];
 
-  const totalEarnings = mockAffiliates.reduce((s, a) => s + a.earnings, 0);
-  const totalReferrals = mockAffiliates.reduce((s, a) => s + a.referrals, 0);
+  const totalEarnings = affiliates.reduce((s, a) => s + a.earnings, 0);
+  const totalReferrals = affiliates.reduce((s, a) => s + a.referrals, 0);
+
+  const handleCreate = async () => {
+    setFormError(null);
+    if (!form.name || !form.code) {
+      setFormError('נא למלא שם וקוד שותף');
+      return;
+    }
+    setCreating(true);
+    try {
+      await apiFetch('/api/affiliates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name,
+          code: form.code,
+          commissionRate: Number(form.commissionRate) || 0,
+        }),
+      });
+      setShowCreate(false);
+      setForm({ name: '', code: '', commissionRate: '10' });
+      await refresh();
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="animate-fadeIn" style={{ maxWidth: '1400px', margin: '0 auto' }}>
@@ -28,10 +61,11 @@ export default function AffiliatesPage() {
         </button>
       </div>
 
-      {/* Stats */}
+      {error && <div style={{ color: '#c62828', marginBottom: '16px' }}>⚠️ {error}</div>}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         {[
-          { label: 'שותפים פעילים', value: mockAffiliates.filter(a => a.isActive).length, icon: '🤝', color: '#1e3a6e' },
+          { label: 'שותפים פעילים', value: affiliates.filter(a => a.isActive).length, icon: '🤝', color: '#1e3a6e' },
           { label: t('referrals'), value: totalReferrals, icon: '👥', color: '#2451a0' },
           { label: t('earnings'), value: `₪${totalEarnings.toLocaleString()}`, icon: '💰', color: '#c9a227' },
         ].map(s => (
@@ -47,8 +81,9 @@ export default function AffiliatesPage() {
         ))}
       </div>
 
-      {/* Affiliates List */}
-      {mockAffiliates.map(affiliate => (
+      {loading && <div style={{ color: '#6b7a9a' }}>טוען שותפים...</div>}
+
+      {affiliates.map(affiliate => (
         <div key={affiliate.id} className="card" style={{ padding: '20px', marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
             <div>
@@ -81,20 +116,6 @@ export default function AffiliatesPage() {
               </div>
             </div>
           </div>
-          <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-            <button style={{
-              padding: '6px 14px', borderRadius: '8px', border: '1px solid #dae8f8',
-              background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-            }}>
-              📋 העתק קישור
-            </button>
-            <button style={{
-              padding: '6px 14px', borderRadius: '8px', border: '1px solid #dae8f8',
-              background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-            }}>
-              📊 צפה בדוח
-            </button>
-          </div>
         </div>
       ))}
 
@@ -106,15 +127,27 @@ export default function AffiliatesPage() {
             <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#1e3a6e', marginBottom: '20px' }}>
               ➕ {t('createAffiliate')}
             </h3>
-            {['שם שותף', 'קוד שותף', 'שיעור עמלה (%)'].map(label => (
-              <div key={label} style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#1e3a6e', marginBottom: '4px' }}>{label}</label>
-                <input style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dae8f8', fontSize: '14px', outline: 'none' }} />
+            {formError && <div style={{ color: '#c62828', marginBottom: '12px' }}>⚠️ {formError}</div>}
+            {[
+              { key: 'name' as const, label: 'שם שותף' },
+              { key: 'code' as const, label: 'קוד שותף' },
+              { key: 'commissionRate' as const, label: 'שיעור עמלה (%)', type: 'number' },
+            ].map(field => (
+              <div key={field.key} style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#1e3a6e', marginBottom: '4px' }}>{field.label}</label>
+                <input
+                  value={form[field.key]}
+                  onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
+                  type={field.type ?? 'text'}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dae8f8', fontSize: '14px', outline: 'none' }}
+                />
               </div>
             ))}
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button onClick={() => setShowCreate(false)} style={{ padding: '10px 20px', borderRadius: '10px', border: '1.5px solid #dae8f8', background: 'white', color: '#6b7a9a', fontWeight: '600', cursor: 'pointer' }}>{t('cancel')}</button>
-              <button onClick={() => { setShowCreate(false); alert('שותף נוצר בהצלחה!'); }} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', fontWeight: '700', cursor: 'pointer' }}>{t('save')}</button>
+              <button onClick={handleCreate} disabled={creating} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', fontWeight: '700', cursor: 'pointer', opacity: creating ? 0.7 : 1 }}>
+                {creating ? '⏳ שומר...' : t('save')}
+              </button>
             </div>
           </div>
         </div>

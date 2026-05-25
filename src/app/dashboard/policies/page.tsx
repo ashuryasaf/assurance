@@ -1,7 +1,8 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockPolicies } from '@/lib/mockData';
+import { useApi } from '@/lib/client-api';
+import type { Policy } from '@/lib/types';
 import { useState } from 'react';
 
 export default function PoliciesPage() {
@@ -9,6 +10,9 @@ export default function PoliciesPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
+
+  const { data, loading, error } = useApi<{ policies: Policy[] }>('/api/policies');
+  const policies = data?.policies ?? [];
 
   const typeLabels: Record<string, string> = {
     life: 'חיים', health: 'בריאות', car: 'רכב', home: 'דירה',
@@ -28,7 +32,7 @@ export default function PoliciesPage() {
     investment: '#607d8b', gemel: '#ff5722', kranot: '#3f51b5',
   };
 
-  const filtered = mockPolicies.filter(p => {
+  const filtered = policies.filter(p => {
     const matchSearch = !search || p.policyNumber.toLowerCase().includes(search.toLowerCase()) ||
       p.provider.includes(search) || typeLabels[p.type]?.includes(search);
     const matchType = typeFilter === 'all' || p.type === typeFilter;
@@ -43,11 +47,16 @@ export default function PoliciesPage() {
         📋 {t('policyManagement')}
       </h1>
 
-      {/* Summary */}
+      {error && (
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#fce4ec', color: '#c62828', marginBottom: '16px' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '24px' }}>
         <div className="card" style={{ padding: '18px', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', borderRadius: '14px' }}>
           <div style={{ fontSize: '12px', opacity: 0.8 }}>{t('totalPolicies')}</div>
-          <div style={{ fontSize: '28px', fontWeight: '800' }}>{mockPolicies.length}</div>
+          <div style={{ fontSize: '28px', fontWeight: '800' }}>{policies.length}</div>
         </div>
         <div className="card" style={{ padding: '18px', background: 'linear-gradient(135deg, #c9a227, #a87c1a)', color: 'white', borderRadius: '14px' }}>
           <div style={{ fontSize: '12px', opacity: 0.8 }}>{t('monthlyPremium')}</div>
@@ -55,11 +64,10 @@ export default function PoliciesPage() {
         </div>
         <div className="card" style={{ padding: '18px', background: 'linear-gradient(135deg, #1a8c5a, #22c55e)', color: 'white', borderRadius: '14px' }}>
           <div style={{ fontSize: '12px', opacity: 0.8 }}>{t('activePolicies')}</div>
-          <div style={{ fontSize: '28px', fontWeight: '800' }}>{mockPolicies.filter(p => p.status === 'active').length}</div>
+          <div style={{ fontSize: '28px', fontWeight: '800' }}>{policies.filter(p => p.status === 'active').length}</div>
         </div>
       </div>
 
-      {/* Search & Filters */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder={t('search')}
@@ -79,7 +87,8 @@ export default function PoliciesPage() {
         </div>
       </div>
 
-      {/* Policies Grid */}
+      {loading && <div style={{ color: '#6b7a9a', fontSize: '14px' }}>טוען פוליסות...</div>}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
         {filtered.map(policy => (
           <div key={policy.id} className="card" style={{ padding: '18px', cursor: 'pointer', transition: 'transform 0.15s' }}

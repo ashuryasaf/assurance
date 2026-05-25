@@ -20,11 +20,11 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const success = await login(email, password);
-    if (success) {
+    const result = await login(email, password);
+    if (result.ok) {
       router.push('/dashboard');
     } else {
-      setError('פרטי כניסה שגויים');
+      setError(result.error || 'פרטי כניסה שגויים');
     }
     setLoading(false);
   };

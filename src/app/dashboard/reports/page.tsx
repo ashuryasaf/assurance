@@ -1,17 +1,49 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockReports, chartData } from '@/lib/mockData';
+import { apiFetch, useApi } from '@/lib/client-api';
 import { useState } from 'react';
+import type { Report } from '@/lib/types';
+
+type ChartItem = { name: string; value: number; color: string };
+type SummaryResp = {
+  policyDistribution: ChartItem[];
+  monthlyPremiums: { month: string; value: number }[];
+};
+type AgentPerf = { name: string; policies: number; revenue: number; clients: number };
 
 export default function ReportsPage() {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'reports' | 'bi'>('reports');
   const [generating, setGenerating] = useState(false);
 
-  const handleGenerate = () => {
+  const reportsApi = useApi<{ reports: Report[] }>('/api/reports');
+  const summaryApi = useApi<SummaryResp>('/api/dashboard/summary');
+  const agentApi = useApi<{ agentPerformance: AgentPerf[] }>('/api/dashboard/agent');
+
+  const reports = reportsApi.data?.reports ?? [];
+  const monthlyPremiums = summaryApi.data?.monthlyPremiums ?? [];
+  const policyDistribution = summaryApi.data?.policyDistribution ?? [];
+  const agentPerformance = agentApi.data?.agentPerformance ?? [];
+
+  const handleGenerate = async () => {
     setGenerating(true);
-    setTimeout(() => setGenerating(false), 2000);
+    try {
+      await apiFetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `דוח אד-הוק • ${new Date().toLocaleDateString('he-IL')}`,
+          type: 'bi_analytics',
+          format: 'pdf',
+        }),
+      });
+      await reportsApi.refresh();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const reportTypeLabels: Record<string, string> = {
@@ -41,7 +73,6 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
         {[
           { key: 'reports' as const, label: 'דוחות', icon: '📋' },
@@ -59,8 +90,11 @@ export default function ReportsPage() {
 
       {activeTab === 'reports' && (
         <div>
-          {/* Reports List */}
-          {mockReports.map(report => (
+          {reportsApi.loading && <div style={{ color: '#6b7a9a' }}>טוען דוחות...</div>}
+          {reports.length === 0 && !reportsApi.loading && (
+            <div style={{ color: '#6b7a9a' }}>אין דוחות עדיין. השתמש בכפתור &quot;{t('generateNew')}&quot; כדי ליצור דוח.</div>
+          )}
+          {reports.map(report => (
             <div key={report.id} className="card" style={{ padding: '18px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
@@ -96,95 +130,106 @@ export default function ReportsPage() {
 
       {activeTab === 'bi' && (
         <div>
-          {/* Monthly Premiums Chart */}
           <div className="card" style={{ padding: '24px', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '20px' }}>
               💰 מגמת פרמיות חודשיות
             </h3>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '200px' }}>
-              {chartData.monthlyPremiums.map((d, i) => {
-                const min = 4000; const max = 4600;
-                const height = ((d.value - min) / (max - min)) * 180;
-                return (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                    <div style={{ fontSize: '10px', color: '#6b7a9a', fontWeight: '600' }}>₪{d.value}</div>
-                    <div style={{
-                      width: '100%', height: `${height}px`, borderRadius: '6px 6px 0 0',
-                      background: 'linear-gradient(to top, #c9a227, #d4b44a)',
-                    }} />
-                    <div style={{ fontSize: '10px', color: '#6b7a9a' }}>{d.month}</div>
-                  </div>
-                );
-              })}
-            </div>
+            {monthlyPremiums.length === 0 ? (
+              <div style={{ color: '#6b7a9a' }}>אין נתונים</div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '200px' }}>
+                {monthlyPremiums.map((d, i) => {
+                  const max = Math.max(1, ...monthlyPremiums.map(m => m.value));
+                  const min = Math.min(...monthlyPremiums.map(m => m.value));
+                  const span = Math.max(1, max - min);
+                  const height = ((d.value - min) / span) * 180 + 8;
+                  return (
+                    <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ fontSize: '10px', color: '#6b7a9a', fontWeight: '600' }}>₪{d.value}</div>
+                      <div style={{
+                        width: '100%', height: `${height}px`, borderRadius: '6px 6px 0 0',
+                        background: 'linear-gradient(to top, #c9a227, #d4b44a)',
+                      }} />
+                      <div style={{ fontSize: '10px', color: '#6b7a9a' }}>{d.month}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* Agent Performance */}
           <div className="card" style={{ padding: '24px', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '20px' }}>
               👥 {t('agentPerformance')}
             </h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                <thead>
-                  <tr>
-                    {['סוכן', 'פוליסות', 'הכנסות', 'לקוחות', 'ביצועים'].map(h => (
-                      <th key={h} style={{ padding: '12px 14px', background: '#f0f6ff', color: '#1e3a6e', fontWeight: '700', fontSize: '13px', textAlign: 'start' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {chartData.agentPerformance.map((agent, i) => {
-                    const maxPolicies = Math.max(...chartData.agentPerformance.map(a => a.policies));
-                    const perf = (agent.policies / maxPolicies) * 100;
-                    return (
-                      <tr key={i}>
-                        <td style={{ padding: '12px 14px', fontWeight: '600' }}>{agent.name}</td>
-                        <td style={{ padding: '12px 14px' }}>{agent.policies}</td>
-                        <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1a8c5a' }}>₪{agent.revenue.toLocaleString()}</td>
-                        <td style={{ padding: '12px 14px' }}>{agent.clients}</td>
-                        <td style={{ padding: '12px 14px', width: '200px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ flex: 1, height: '8px', background: '#f0f4f8', borderRadius: '4px', overflow: 'hidden' }}>
-                              <div style={{ width: `${perf}%`, height: '100%', background: 'linear-gradient(90deg, #1e3a6e, #3468c4)', borderRadius: '4px' }} />
+            {agentPerformance.length === 0 ? (
+              <div style={{ color: '#6b7a9a' }}>אין נתוני ביצועי סוכנים</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <thead>
+                    <tr>
+                      {['סוכן', 'פוליסות', 'הכנסות', 'לקוחות', 'ביצועים'].map(h => (
+                        <th key={h} style={{ padding: '12px 14px', background: '#f0f6ff', color: '#1e3a6e', fontWeight: '700', fontSize: '13px', textAlign: 'start' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agentPerformance.map((agent, i) => {
+                      const maxPolicies = Math.max(1, ...agentPerformance.map(a => a.policies));
+                      const perf = (agent.policies / maxPolicies) * 100;
+                      return (
+                        <tr key={i}>
+                          <td style={{ padding: '12px 14px', fontWeight: '600' }}>{agent.name}</td>
+                          <td style={{ padding: '12px 14px' }}>{agent.policies}</td>
+                          <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1a8c5a' }}>₪{agent.revenue.toLocaleString()}</td>
+                          <td style={{ padding: '12px 14px' }}>{agent.clients}</td>
+                          <td style={{ padding: '12px 14px', width: '200px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ flex: 1, height: '8px', background: '#f0f4f8', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ width: `${perf}%`, height: '100%', background: 'linear-gradient(90deg, #1e3a6e, #3468c4)', borderRadius: '4px' }} />
+                              </div>
+                              <span style={{ fontSize: '12px', color: '#6b7a9a', fontWeight: '600' }}>{perf.toFixed(0)}%</span>
                             </div>
-                            <span style={{ fontSize: '12px', color: '#6b7a9a', fontWeight: '600' }}>{perf.toFixed(0)}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {/* Policy Distribution */}
           <div className="card" style={{ padding: '24px' }}>
             <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '20px' }}>
               📋 התפלגות פוליסות לפי סוג
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {chartData.policyDistribution.map(item => {
-                const total = chartData.policyDistribution.reduce((s, i) => s + i.value, 0);
-                const pct = ((item.value / total) * 100).toFixed(1);
-                return (
-                  <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '90px', fontSize: '13px', color: '#6b7a9a', fontWeight: '500' }}>{item.name}</div>
-                    <div style={{ flex: 1, height: '28px', background: '#f0f4f8', borderRadius: '14px', overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', width: `${pct}%`, background: item.color, borderRadius: '14px',
-                        display: 'flex', alignItems: 'center', paddingInlineStart: '10px',
-                        fontSize: '11px', color: 'white', fontWeight: '700', minWidth: '50px',
-                      }}>
-                        ₪{item.value}
+            {policyDistribution.length === 0 ? (
+              <div style={{ color: '#6b7a9a' }}>אין נתונים</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {policyDistribution.map(item => {
+                  const total = policyDistribution.reduce((s, i) => s + i.value, 0);
+                  const pct = total ? ((item.value / total) * 100).toFixed(1) : '0.0';
+                  return (
+                    <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '90px', fontSize: '13px', color: '#6b7a9a', fontWeight: '500' }}>{item.name}</div>
+                      <div style={{ flex: 1, height: '28px', background: '#f0f4f8', borderRadius: '14px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', width: `${pct}%`, background: item.color, borderRadius: '14px',
+                          display: 'flex', alignItems: 'center', paddingInlineStart: '10px',
+                          fontSize: '11px', color: 'white', fontWeight: '700', minWidth: '50px',
+                        }}>
+                          ₪{item.value}
+                        </div>
                       </div>
+                      <div style={{ width: '50px', fontSize: '12px', color: '#6b7a9a', fontWeight: '600', textAlign: 'end' }}>{pct}%</div>
                     </div>
-                    <div style={{ width: '50px', fontSize: '12px', color: '#6b7a9a', fontWeight: '600', textAlign: 'end' }}>{pct}%</div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

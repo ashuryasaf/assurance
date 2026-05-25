@@ -2,21 +2,43 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockPolicies, mockDocuments, mockActivity, chartData, mockInvestmentPortfolio } from '@/lib/mockData';
 import { ROLE_LABELS_HE } from '@/lib/types';
+import { useApi } from '@/lib/client-api';
 import Link from 'next/link';
+
+type Activity = { id: string; type: string; message: string; icon: string; time: string };
+type ChartItem = { name: string; value: number; color: string };
+
+type SummaryResponse = {
+  summary: {
+    totalPolicies: number;
+    totalPremium: number;
+    totalDocuments: number;
+    totalInvestments: number;
+    totalReturns: number;
+    regulatoryFeeds: number;
+  };
+  policyDistribution: ChartItem[];
+  monthlyPremiums: { month: string; value: number }[];
+  investmentPerformance: { month: string; value: number }[];
+  activity: Activity[];
+};
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { data, loading, error } = useApi<SummaryResponse>('/api/dashboard/summary');
 
-  const totalPremium = mockPolicies.reduce((sum, p) => sum + p.premium, 0);
+  const summary = data?.summary;
+  const totalPremium = summary?.totalPremium ?? 0;
+  const policyDistribution = data?.policyDistribution ?? [];
+  const activity = data?.activity ?? [];
 
   const statCards = [
-    { label: t('totalPolicies'), value: mockPolicies.length.toString(), icon: '📋', color: '#1e3a6e', href: '/dashboard/policies' },
+    { label: t('totalPolicies'), value: (summary?.totalPolicies ?? 0).toString(), icon: '📋', color: '#1e3a6e', href: '/dashboard/policies' },
     { label: t('monthlyPremium'), value: `₪${totalPremium.toLocaleString()}`, icon: '💰', color: '#c9a227', href: '/dashboard/policies' },
-    { label: t('activeDocuments'), value: mockDocuments.length.toString(), icon: '📁', color: '#2451a0', href: '/dashboard/documents' },
-    { label: t('totalInvestments'), value: `₪${mockInvestmentPortfolio.totalValue.toLocaleString()}`, icon: '📈', color: '#1a8c5a', href: '/dashboard/investments' },
+    { label: t('activeDocuments'), value: (summary?.totalDocuments ?? 0).toString(), icon: '📁', color: '#2451a0', href: '/dashboard/documents' },
+    { label: t('totalInvestments'), value: `₪${(summary?.totalInvestments ?? 0).toLocaleString()}`, icon: '📈', color: '#1a8c5a', href: '/dashboard/investments' },
   ];
 
   const quickActions = [
@@ -44,7 +66,12 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stat Cards */}
+      {error && (
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#fce4ec', color: '#c62828', marginBottom: '16px' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         {statCards.map(card => (
           <Link key={card.label} href={card.href} style={{ textDecoration: 'none' }}>
@@ -55,7 +82,7 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ color: '#6b7a9a', fontSize: '13px', marginBottom: '6px' }}>{card.label}</div>
-                  <div style={{ fontSize: '26px', fontWeight: '800', color: '#1e3a6e' }}>{card.value}</div>
+                  <div style={{ fontSize: '26px', fontWeight: '800', color: '#1e3a6e' }}>{loading ? '...' : card.value}</div>
                 </div>
                 <span style={{ fontSize: '32px' }}>{card.icon}</span>
               </div>
@@ -65,34 +92,36 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-        {/* Premium Distribution Chart */}
         <div className="card" style={{ padding: '24px' }}>
           <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '20px' }}>
             {t('portfolioOverview')}
           </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {chartData.policyDistribution.map(item => {
-              const percent = ((item.value / totalPremium) * 100).toFixed(1);
-              return (
-                <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '80px', fontSize: '13px', color: '#6b7a9a', flexShrink: 0 }}>{item.name}</div>
-                  <div style={{ flex: 1, height: '24px', background: '#f0f4f8', borderRadius: '12px', overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', width: `${percent}%`, background: item.color, borderRadius: '12px',
-                      display: 'flex', alignItems: 'center', paddingInlineStart: '8px',
-                      fontSize: '11px', color: 'white', fontWeight: '600', minWidth: '40px',
-                    }}>
-                      ₪{item.value}
+          {policyDistribution.length === 0 ? (
+            <div style={{ color: '#6b7a9a', fontSize: '14px' }}>{loading ? 'טוען...' : 'אין נתוני פוליסות עדיין'}</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {policyDistribution.map(item => {
+                const percent = totalPremium ? ((item.value / totalPremium) * 100).toFixed(1) : '0.0';
+                return (
+                  <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '80px', fontSize: '13px', color: '#6b7a9a', flexShrink: 0 }}>{item.name}</div>
+                    <div style={{ flex: 1, height: '24px', background: '#f0f4f8', borderRadius: '12px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%', width: `${percent}%`, background: item.color, borderRadius: '12px',
+                        display: 'flex', alignItems: 'center', paddingInlineStart: '8px',
+                        fontSize: '11px', color: 'white', fontWeight: '600', minWidth: '40px',
+                      }}>
+                        ₪{item.value}
+                      </div>
                     </div>
+                    <div style={{ width: '45px', fontSize: '12px', color: '#6b7a9a', textAlign: 'end' }}>{percent}%</div>
                   </div>
-                  <div style={{ width: '45px', fontSize: '12px', color: '#6b7a9a', textAlign: 'end' }}>{percent}%</div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Quick Actions */}
         <div className="card" style={{ padding: '24px' }}>
           <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '20px' }}>
             {t('quickActions')}
@@ -115,7 +144,6 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* Israeli Services */}
           <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', margin: '24px 0 12px' }}>
             {t('israeliServices')}
           </h3>
@@ -138,7 +166,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity */}
       <div className="card" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e' }}>{t('recentActivity')}</h3>
@@ -147,7 +174,10 @@ export default function DashboardPage() {
           </Link>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {mockActivity.map(act => (
+          {activity.length === 0 && !loading && (
+            <div style={{ color: '#6b7a9a', fontSize: '14px', padding: '12px' }}>אין פעילות עדיין.</div>
+          )}
+          {activity.map(act => (
             <div key={act.id} style={{
               display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
               borderRadius: '10px', background: '#f8f9fc',

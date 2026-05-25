@@ -2,7 +2,7 @@
 
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { aiResponses } from '@/lib/mockData';
+import { apiFetch } from '@/lib/client-api';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface Message {
@@ -14,31 +14,13 @@ interface Message {
 
 let msgCounter = 0;
 
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function getResponse(query: string): string {
-  const lower = query.toLowerCase();
-  const categories = Object.keys(aiResponses);
-  for (const cat of categories) {
-    if (lower.includes(cat) || (cat === 'policies' && (lower.includes('פוליס') || lower.includes('ביטוח') || lower.includes('חיסכון')))
-      || (cat === 'regulatory' && (lower.includes('מסלקה') || lower.includes('פנסיה') || lower.includes('הר') || lower.includes('גמל')))
-      || (cat === 'investments' && (lower.includes('השקע') || lower.includes('תיק') || lower.includes('תשואה')))
-      || (cat === 'documents' && (lower.includes('מסמך') || lower.includes('נתח') || lower.includes('קובץ')))
-      || (cat === 'affiliate' && (lower.includes('שותף') || lower.includes('עמלה') || lower.includes('הפניה')))) {
-      return pickRandom(aiResponses[cat]);
-    }
-  }
-  return pickRandom(aiResponses.default);
-}
-
 export default function AIAssistantPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
 
@@ -46,7 +28,7 @@ export default function AIAssistantPage() {
     if (!initialized.current) {
       initialized.current = true;
       setMessages([{
-        id: '1', role: 'assistant', timestamp: new Date(),
+        id: 'sys-1', role: 'assistant', timestamp: new Date(),
         content: `שלום ${user?.firstName || ''}! 👋 אני העוזר החכם של Assurance. אני יכול לעזור לך עם:\n\n• 📋 ניתוח פוליסות וחיסכון\n• 🏛️ נתונים מהמסלקה, הר הביטוח וגמל נט\n• 📈 ניתוח תיק השקעות\n• 📁 ניתוח מסמכים שהועלו\n• 🤝 ניהול שותפים ועמלות\n\nמה תרצה לדעת?`,
       }]);
     }
@@ -65,7 +47,7 @@ export default function AIAssistantPage() {
     { label: 'דוח שותפים', query: 'מה מצב השותפים שלי?' },
   ];
 
-  const handleSend = useCallback((text?: string) => {
+  const handleSend = useCallback(async (text?: string) => {
     const msg = text || input;
     if (!msg.trim()) return;
 
@@ -77,17 +59,39 @@ export default function AIAssistantPage() {
     setInput('');
     setIsTyping(true);
 
-    const response = getResponse(msg);
-    const delay = 1000 + Math.random() * 1500;
-    setTimeout(() => {
-      msgCounter++;
-      const assistantMsg: Message = {
-        id: `ai-${msgCounter}`, role: 'assistant', content: response, timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, assistantMsg]);
+    try {
+      const result = await apiFetch<{ conversationId: string; message: { id: string; role: 'assistant'; content: string; timestamp: string } }>(
+        '/api/ai/chat',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg.trim(), conversationId }),
+        },
+      );
+      setConversationId(result.conversationId);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: result.message.id,
+          role: 'assistant',
+          content: result.message.content,
+          timestamp: new Date(result.message.timestamp),
+        },
+      ]);
+    } catch (err) {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          role: 'assistant',
+          content: `אירעה שגיאה: ${(err as Error).message}`,
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
       setIsTyping(false);
-    }, delay);
-  }, [input]);
+    }
+  }, [input, conversationId]);
 
   return (
     <div className="animate-fadeIn" style={{ maxWidth: '1000px', margin: '0 auto', height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column' }}>
@@ -98,10 +102,9 @@ export default function AIAssistantPage() {
         <p style={{ color: '#6b7a9a', fontSize: '15px' }}>{t('aiAssistantSubtitle')}</p>
       </div>
 
-      {/* Suggested Questions */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
         {suggestedQuestions.map(q => (
-          <button key={q.label} onClick={() => handleSend(q.query)} style={{
+          <button key={q.label} onClick={() => void handleSend(q.query)} style={{
             padding: '6px 14px', borderRadius: '20px', border: '1px solid #dae8f8',
             background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600', cursor: 'pointer',
             transition: 'all 0.15s',
@@ -114,7 +117,6 @@ export default function AIAssistantPage() {
         ))}
       </div>
 
-      {/* Messages */}
       <div style={{
         flex: 1, overflowY: 'auto', padding: '16px', borderRadius: '14px',
         background: 'white', border: '1px solid #dae8f8',
@@ -155,21 +157,20 @@ export default function AIAssistantPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div style={{ marginTop: '12px', display: 'flex', gap: '10px' }}>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend()}
+          onKeyDown={e => e.key === 'Enter' && void handleSend()}
           placeholder={t('typeMessage')}
           style={{
             flex: 1, padding: '14px 18px', borderRadius: '14px', border: '1.5px solid #dae8f8',
             fontSize: '15px', outline: 'none', background: 'white',
           }}
         />
-        <button onClick={() => handleSend()} disabled={!input.trim()} style={{
+        <button onClick={() => void handleSend()} disabled={!input.trim() || isTyping} style={{
           padding: '14px 24px', borderRadius: '14px', border: 'none', cursor: 'pointer',
-          background: input.trim() ? 'linear-gradient(135deg, #1e3a6e, #2451a0)' : '#dae8f8',
+          background: input.trim() && !isTyping ? 'linear-gradient(135deg, #1e3a6e, #2451a0)' : '#dae8f8',
           color: 'white', fontWeight: '700', fontSize: '15px',
         }}>
           {t('send')} ➤

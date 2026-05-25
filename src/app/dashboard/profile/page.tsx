@@ -3,19 +3,83 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { ROLE_LABELS_HE } from '@/lib/types';
+import { apiFetch } from '@/lib/client-api';
 import { useState } from 'react';
 import type { Language } from '@/lib/translations';
 import { getLanguageName } from '@/lib/translations';
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const { t, language, setLanguage } = useLanguage();
   const [activeTab, setActiveTab] = useState('personal');
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // Derive editable form state from the loaded user. We re-initialise whenever
+  // the user identity changes, following the React "calculate state during
+  // render" pattern (avoids useEffect+setState that strict React forbids).
+  const [profile, setProfile] = useState({
+    firstName: user?.firstName ?? '',
+    lastName: user?.lastName ?? '',
+    phone: user?.phone ?? '',
+    idNumber: user?.idNumber ?? '',
+  });
+  const [syncedUserId, setSyncedUserId] = useState<string | null>(user?.id ?? null);
+  if (user && syncedUserId !== user.id) {
+    setSyncedUserId(user.id);
+    setProfile({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      idNumber: user.idNumber,
+    });
+  }
+
+  const [pwForm, setPwForm] = useState({
+    currentPassword: '', newPassword: '', confirmPassword: '',
+  });
+
+  const handleProfileSave = async () => {
+    setError(null);
+    try {
+      await apiFetch('/api/auth/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      setSaved(true);
+      await refresh();
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handlePasswordSave = async () => {
+    setError(null);
+    if (pwForm.newPassword.length < 8) {
+      setError('סיסמה חדשה חייבת להכיל לפחות 8 תווים');
+      return;
+    }
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      setError('אימות הסיסמה אינו תואם');
+      return;
+    }
+    try {
+      await apiFetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: pwForm.currentPassword,
+          newPassword: pwForm.newPassword,
+        }),
+      });
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError((err as Error).message);
+    }
   };
 
   const languages: Language[] = ['he', 'en', 'ru', 'fr', 'ar'];
@@ -34,7 +98,6 @@ export default function ProfilePage() {
         👤 {t('profile')}
       </h1>
 
-      {/* User Card */}
       <div className="card" style={{ padding: '24px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
         <div style={{
           width: '72px', height: '72px', borderRadius: '50%',
@@ -42,7 +105,7 @@ export default function ProfilePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'white', fontWeight: '800', fontSize: '28px',
         }}>
-          {user?.firstName[0]}
+          {user?.firstName[0] ?? '?'}
         </div>
         <div>
           <div style={{ fontSize: '22px', fontWeight: '800', color: '#1e3a6e' }}>
@@ -58,7 +121,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
         {tabs.map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
@@ -77,28 +139,37 @@ export default function ProfilePage() {
           ✅ {t('saved')}
         </div>
       )}
+      {error && (
+        <div style={{ padding: '12px 20px', borderRadius: '10px', background: '#fce4ec', color: '#c62828', fontWeight: '700', marginBottom: '16px' }}>
+          ⚠️ {error}
+        </div>
+      )}
 
-      {/* Personal Info */}
       {activeTab === 'personal' && (
         <div className="card" style={{ padding: '24px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {[
-              { label: t('firstName'), value: user?.firstName },
-              { label: t('lastName'), value: user?.lastName },
-              { label: t('email'), value: user?.email },
-              { label: t('phone'), value: user?.phone },
-              { label: t('idNumber'), value: user?.idNumber },
+              { label: t('firstName'), key: 'firstName' as const },
+              { label: t('lastName'), key: 'lastName' as const },
+              { label: t('email'), key: 'email' as const, value: user?.email, readOnly: true },
+              { label: t('phone'), key: 'phone' as const },
+              { label: t('idNumber'), key: 'idNumber' as const },
             ].map(field => (
               <div key={field.label}>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#1e3a6e', marginBottom: '4px' }}>{field.label}</label>
-                <input defaultValue={field.value || ''} style={{
-                  width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dae8f8',
-                  fontSize: '14px', outline: 'none',
-                }} />
+                <input
+                  value={field.readOnly ? field.value ?? '' : (profile[field.key as keyof typeof profile] ?? '')}
+                  onChange={e => !field.readOnly && setProfile(p => ({ ...p, [field.key]: e.target.value }))}
+                  readOnly={field.readOnly}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dae8f8',
+                    fontSize: '14px', outline: 'none',
+                    background: field.readOnly ? '#f0f4f8' : 'white',
+                  }} />
               </div>
             ))}
           </div>
-          <button onClick={handleSave} style={{
+          <button onClick={handleProfileSave} style={{
             marginTop: '20px', padding: '12px 24px', borderRadius: '10px', border: 'none',
             background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white',
             fontWeight: '700', cursor: 'pointer',
@@ -108,20 +179,24 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Security */}
       {activeTab === 'security' && (
         <div className="card" style={{ padding: '24px' }}>
           <h3 style={{ fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>{t('changePassword')}</h3>
-          {['סיסמה נוכחית', 'סיסמה חדשה', 'אימות סיסמה'].map(label => (
-            <div key={label} style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#1e3a6e', marginBottom: '4px' }}>{label}</label>
-              <input type="password" style={{
-                width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dae8f8',
-                fontSize: '14px', outline: 'none',
-              }} />
+          {[
+            { label: 'סיסמה נוכחית', key: 'currentPassword' as const },
+            { label: 'סיסמה חדשה', key: 'newPassword' as const },
+            { label: 'אימות סיסמה', key: 'confirmPassword' as const },
+          ].map(f => (
+            <div key={f.key} style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#1e3a6e', marginBottom: '4px' }}>{f.label}</label>
+              <input type="password" value={pwForm[f.key]} onChange={e => setPwForm(p => ({ ...p, [f.key]: e.target.value }))}
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dae8f8',
+                  fontSize: '14px', outline: 'none',
+                }} />
             </div>
           ))}
-          <button onClick={handleSave} style={{
+          <button onClick={handlePasswordSave} style={{
             marginTop: '8px', padding: '12px 24px', borderRadius: '10px', border: 'none',
             background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', fontWeight: '700', cursor: 'pointer',
           }}>
@@ -129,58 +204,20 @@ export default function ProfilePage() {
           </button>
 
           <div style={{ marginTop: '24px', padding: '16px', background: '#f0f6ff', borderRadius: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: '700', color: '#1e3a6e', marginBottom: '4px' }}>🔐 {t('twoFactorAuth')}</div>
-                <div style={{ fontSize: '13px', color: '#6b7a9a' }}>הגן על החשבון שלך עם שכבת אבטחה נוספת</div>
-              </div>
-              <button style={{
-                padding: '8px 18px', borderRadius: '8px', border: 'none',
-                background: '#c9a227', color: 'white', fontWeight: '700', cursor: 'pointer', fontSize: '13px',
-              }}>
-                הפעל
-              </button>
-            </div>
+            <div style={{ fontWeight: '700', color: '#1e3a6e', marginBottom: '4px' }}>🔐 {t('twoFactorAuth')}</div>
+            <div style={{ fontSize: '13px', color: '#6b7a9a' }}>אימות דו-שלבי יושק בעדכון הבא של המערכת.</div>
           </div>
         </div>
       )}
 
-      {/* Notifications */}
       {activeTab === 'notifications' && (
         <div className="card" style={{ padding: '24px' }}>
-          {[
-            { label: 'התראות דוא"ל', desc: 'קבל עדכונים על פוליסות ומסמכים', enabled: true },
-            { label: 'התראות SMS', desc: 'קבל הודעות SMS על אירועים חשובים', enabled: false },
-            { label: 'תובנות AI', desc: 'קבל המלצות חיסכון מ-AI', enabled: true },
-            { label: 'עדכוני רגולציה', desc: 'קבל עדכונים ממסלקה, הר הביטוח וגמל נט', enabled: true },
-            { label: 'דוחות חודשיים', desc: 'קבל סיכום חודשי של התיק', enabled: true },
-          ].map(notif => (
-            <div key={notif.label} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '14px 0', borderBottom: '1px solid #f0f4f8',
-            }}>
-              <div>
-                <div style={{ fontWeight: '600', color: '#1e3a6e', fontSize: '14px' }}>{notif.label}</div>
-                <div style={{ fontSize: '12px', color: '#6b7a9a' }}>{notif.desc}</div>
-              </div>
-              <div style={{
-                width: '44px', height: '24px', borderRadius: '12px', cursor: 'pointer',
-                background: notif.enabled ? '#22c55e' : '#dae8f8',
-                position: 'relative', transition: 'background 0.2s',
-              }}>
-                <div style={{
-                  width: '20px', height: '20px', borderRadius: '50%', background: 'white',
-                  position: 'absolute', top: '2px',
-                  insetInlineStart: notif.enabled ? '22px' : '2px',
-                  transition: 'inset-inline-start 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }} />
-              </div>
-            </div>
-          ))}
+          <p style={{ color: '#6b7a9a', fontSize: '14px' }}>
+            הגדרות התראות יישמרו בחשבון שלך בעדכון הקרוב. בינתיים, ההתראות שולחות באמצעות ערוצי ברירת המחדל של המערכת.
+          </p>
         </div>
       )}
 
-      {/* Language */}
       {activeTab === 'language' && (
         <div className="card" style={{ padding: '24px' }}>
           <h3 style={{ fontWeight: '700', color: '#1e3a6e', marginBottom: '16px' }}>🌐 {t('language')}</h3>

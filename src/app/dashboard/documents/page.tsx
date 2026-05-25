@@ -1,47 +1,42 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { mockDocuments } from '@/lib/mockData';
+import { apiFetch, useApi } from '@/lib/client-api';
 import { useState, useRef } from 'react';
 import type { Document } from '@/lib/types';
 
 export default function DocumentsPage() {
   const { t } = useLanguage();
-  const [docs, setDocs] = useState<Document[]>(mockDocuments);
+  const { data, loading, error, refresh, setData } = useApi<{ documents: Document[] }>('/api/documents');
+  const docs = data?.documents ?? [];
   const [dragOver, setDragOver] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [filter, setFilter] = useState('all');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = (files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).forEach(file => {
-      const newDoc: Document = {
-        id: `d${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: file.name,
-        type: 'other',
-        mimeType: file.type,
-        size: file.size,
-        uploadDate: new Date().toISOString().split('T')[0],
-        uploadedBy: '4',
-        status: 'pending',
-        clientId: '4',
-        tags: [],
-        aiAnalysis: undefined,
-      };
-      setDocs(prev => [newDoc, ...prev]);
-      setTimeout(() => {
-        setDocs(prev => prev.map(d => d.id === newDoc.id ? {
-          ...d, status: 'processed' as const,
-          aiAnalysis: {
-            summary: `מסמך "${file.name}" נותח בהצלחה על ידי AI. נמצאו נתונים רלוונטיים.`,
-            extractedData: { filename: file.name, size: `${(file.size / 1024).toFixed(0)} KB`, type: file.type },
-            recommendations: ['המסמך נשמר בהצלחה', 'ניתוח AI הושלם'],
-            processedAt: new Date().toISOString(), confidence: 0.88,
-          },
-        } : d));
-      }, 3000);
-    });
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadError(null);
+    for (const file of Array.from(files)) {
+      const tempId = `tmp-${Date.now()}-${file.name}`;
+      setUploading(u => [...u, tempId]);
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        const result = await apiFetch<{ document: Document }>('/api/documents', {
+          method: 'POST',
+          body: form,
+        });
+        setData(prev => ({ documents: [result.document, ...(prev?.documents ?? [])] }));
+      } catch (err) {
+        setUploadError((err as Error).message);
+      } finally {
+        setUploading(u => u.filter(x => x !== tempId));
+      }
+    }
+    void refresh();
   };
 
   const statusColors: Record<string, { bg: string; color: string }> = {
@@ -65,12 +60,17 @@ export default function DocumentsPage() {
         📁 {t('documentManagement')}
       </h1>
 
-      {/* Upload Area */}
+      {(error || uploadError) && (
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#fce4ec', color: '#c62828', marginBottom: '16px' }}>
+          ⚠️ {uploadError || error}
+        </div>
+      )}
+
       <div
         className="card"
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
-        onDrop={e => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files); }}
+        onDrop={e => { e.preventDefault(); setDragOver(false); void handleUpload(e.dataTransfer.files); }}
         onClick={() => fileInputRef.current?.click()}
         style={{
           padding: '40px', marginBottom: '24px', textAlign: 'center', cursor: 'pointer',
@@ -83,11 +83,15 @@ export default function DocumentsPage() {
         <div style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '6px' }}>{t('dragDrop')}</div>
         <div style={{ color: '#6b7a9a', fontSize: '14px', marginBottom: '4px' }}>{t('orBrowse')}</div>
         <div style={{ color: '#6b7a9a', fontSize: '12px' }}>{t('supportedFormats')}</div>
-        <input ref={fileInputRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv,.zip,.jpg,.jpeg,.png,.doc,.docx" style={{ display: 'none' }}
-          onChange={e => handleUpload(e.target.files)} />
+        <input ref={fileInputRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv,.zip,.jpg,.jpeg,.png,.doc,.docx,.txt" style={{ display: 'none' }}
+          onChange={e => void handleUpload(e.target.files)} />
+        {uploading.length > 0 && (
+          <div style={{ marginTop: '12px', color: '#856404', fontWeight: 600 }}>
+            ⏳ מעלה {uploading.length} קובץ(ים)...
+          </div>
+        )}
       </div>
 
-      {/* Filters */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
         {['all', 'pending', 'processed', 'signed', 'archived'].map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
@@ -100,7 +104,8 @@ export default function DocumentsPage() {
         ))}
       </div>
 
-      {/* Documents Grid */}
+      {loading && <div style={{ color: '#6b7a9a', fontSize: '14px' }}>טוען מסמכים...</div>}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
         {filteredDocs.map(doc => (
           <div key={doc.id} className="card" style={{ padding: '18px', cursor: 'pointer' }}
@@ -140,16 +145,10 @@ export default function DocumentsPage() {
                 🤖 {doc.aiAnalysis.summary.substring(0, 80)}...
               </div>
             )}
-            {doc.status === 'pending' && (
-              <div style={{ marginTop: '8px', height: '4px', background: '#e0e0e0', borderRadius: '2px', overflow: 'hidden' }}>
-                <div className="animate-loading" style={{ width: '60%', height: '100%', background: 'linear-gradient(90deg, #c9a227, #1e3a6e, #c9a227)', backgroundSize: '200%', animation: 'loading 1.5s ease-in-out infinite' }} />
-              </div>
-            )}
           </div>
         ))}
       </div>
 
-      {/* Document Detail Modal */}
       {selectedDoc && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setSelectedDoc(null)}>
@@ -195,6 +194,16 @@ export default function DocumentsPage() {
                   נחתם ב: {selectedDoc.signatureData.signedAt}
                   {selectedDoc.signatureData.verified && ' • ✅ מאומת'}
                 </div>
+              </div>
+            )}
+            {selectedDoc.url && (
+              <div style={{ marginTop: '16px' }}>
+                <a href={selectedDoc.url} target="_blank" rel="noreferrer" style={{
+                  display: 'inline-block', padding: '10px 20px', borderRadius: '10px', background: '#1e3a6e', color: 'white',
+                  fontWeight: '700', textDecoration: 'none', fontSize: '14px',
+                }}>
+                  ⬇ הורד / צפה במקור
+                </a>
               </div>
             )}
           </div>

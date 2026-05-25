@@ -22,11 +22,11 @@ export default function InvitePage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const success = await loginWithInvite(token, form);
-    if (success) {
+    const result = await loginWithInvite(token, form);
+    if (result.ok) {
       router.push('/dashboard');
     } else {
-      setError('טוקן הזמנה לא תקין');
+      setError(result.error || 'טוקן הזמנה לא תקין');
     }
     setLoading(false);
   };

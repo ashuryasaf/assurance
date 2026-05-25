@@ -1,7 +1,7 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
-import { aiResponses } from '@/lib/mockData';
+import { apiFetch } from '@/lib/client-api';
 import { useState } from 'react';
 import Link from 'next/link';
 
@@ -10,12 +10,24 @@ export default function AIAssistantBar() {
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState('');
   const [lastResponse, setLastResponse] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    const defaults = aiResponses.default;
-    setLastResponse(defaults[Math.floor(Math.random() * defaults.length)]);
-    setInput('');
+  const handleSend = async () => {
+    if (!input.trim() || busy) return;
+    setBusy(true);
+    try {
+      const result = await apiFetch<{ message: { content: string } }>('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: input.trim() }),
+      });
+      setLastResponse(result.message.content);
+      setInput('');
+    } catch (err) {
+      setLastResponse(`שגיאה: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -70,7 +82,7 @@ export default function AIAssistantBar() {
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
+              onKeyDown={e => e.key === 'Enter' && void handleSend()}
               placeholder={t('typeMessage')}
               style={{
                 flex: 1, padding: '8px 14px', borderRadius: '10px',
@@ -78,11 +90,12 @@ export default function AIAssistantBar() {
                 color: 'white', fontSize: '13px', outline: 'none',
               }}
             />
-            <button onClick={handleSend} style={{
+            <button onClick={() => void handleSend()} disabled={busy} style={{
               padding: '8px 16px', borderRadius: '10px', border: 'none',
               background: '#c9a227', color: 'white', fontWeight: '700', cursor: 'pointer', fontSize: '13px',
+              opacity: busy ? 0.7 : 1,
             }}>
-              {t('send')}
+              {busy ? '...' : t('send')}
             </button>
           </div>
         </div>

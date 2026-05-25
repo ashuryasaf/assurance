@@ -21,11 +21,11 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const success = await register(form);
-    if (success) {
+    const result = await register(form);
+    if (result.ok) {
       router.push('/dashboard');
     } else {
-      setError('שגיאה בהרשמה');
+      setError(result.error || 'שגיאה בהרשמה');
     }
     setLoading(false);
   };
