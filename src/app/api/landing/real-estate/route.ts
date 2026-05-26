@@ -4,7 +4,7 @@ import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { requireRole } from "@/lib/dal";
 import { checkRate, clientIp } from "@/lib/throttle";
 
-const CAMPAIGN_TYPES = ["real-estate", "insurance", "investments"] as const;
+const CAMPAIGN_TYPES = ["real-estate", "insurance", "investments", "kadima-real-estate"] as const;
 
 const submissionSchema = z.object({
   fullName: z.string().trim().min(2, "נדרש שם מלא").max(80),
@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       "real-estate": { source: "real-estate-landing", icon: "🏘️", label: "נדל\"ן" },
       insurance: { source: "insurance-landing", icon: "🛡️", label: "ביטוח" },
       investments: { source: "investments-landing", icon: "📈", label: "השקעות" },
+      "kadima-real-estate": { source: "kadima-real-estate-landing", icon: "🏗️", label: "קדימה נדל\"ן" },
     };
     const defaults = CAMPAIGN_DEFAULTS[campaignType] ?? CAMPAIGN_DEFAULTS["real-estate"];
 
