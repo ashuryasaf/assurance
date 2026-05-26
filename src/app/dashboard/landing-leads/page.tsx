@@ -3,7 +3,7 @@
 import { apiFetch, useApi } from '@/lib/client-api';
 import { useState } from 'react';
 
-type CampaignType = 'real-estate' | 'insurance' | 'investments';
+type CampaignType = 'real-estate' | 'insurance' | 'investments' | 'kadima-real-estate';
 
 type LandingLead = {
   id: string;
@@ -40,18 +40,21 @@ const CAMPAIGN_TYPE_OPTIONS: { key: CampaignType | 'all'; label: string; icon: s
   { key: 'real-estate', label: 'נדל"ן', icon: '🏘️' },
   { key: 'insurance', label: 'ביטוח', icon: '🛡️' },
   { key: 'investments', label: 'השקעות', icon: '📈' },
+  { key: 'kadima-real-estate', label: 'קדימה נדל"ן', icon: '🏗️' },
 ];
 
 const CAMPAIGN_LABELS: Record<CampaignType, { label: string; icon: string; color: string }> = {
   'real-estate': { label: 'נדל"ן', icon: '🏘️', color: '#1e3a6e' },
   insurance: { label: 'ביטוח', icon: '🛡️', color: '#2e7d32' },
   investments: { label: 'השקעות', icon: '📈', color: '#c9a227' },
+  'kadima-real-estate': { label: 'קדימה נדל"ן', icon: '🏗️', color: '#6d4c41' },
 };
 
 const LANDING_URLS: Record<CampaignType, string> = {
   'real-estate': '/landing/real-estate',
   insurance: '/landing/insurance',
   investments: '/landing/investments',
+  'kadima-real-estate': '/landing/kadima-real-estate',
 };
 
 const STATUS_OPTIONS: { key: LandingLead['status']; label: string; color: string }[] = [
