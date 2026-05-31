@@ -35,61 +35,37 @@ export async function GET(req: Request) {
       where.customerType = customerType;
     }
 
-    const leads = await prisma.lead.findMany({
-      where,
-      orderBy: [{ updatedAt: "desc" }, { idNumber: "asc" }],
-      take: 500,
-      include: {
-        communications: { orderBy: { occurredAt: "desc" } },
-        appointments: { orderBy: { scheduledAt: "asc" } },
-        policies: { orderBy: { createdAt: "desc" } },
-      },
-    });
-
-    const filtered = search
-      ? leads.filter((lead) => {
-          const blob = `${lead.idNumber} ${lead.firstName ?? ""} ${lead.lastName ?? ""} ${lead.email ?? ""} ${lead.phone ?? ""} ${lead.city ?? ""}`.toLowerCase();
-          return blob.includes(search.toLowerCase());
-        })
-      : leads;
-
     const rows: string[][] = [[...CRM_CSV_HEADERS]];
-    for (const lead of filtered) {
-      let wroteRelatedRow = false;
-      const push = (fields: Partial<CsvRecord>) => {
-        rows.push(rowFor(lead, fields));
-        wroteRelatedRow = true;
-      };
+    const pageSize = 500;
+    let skip = 0;
 
-      for (const communication of lead.communications) {
-        push({
-          channel: communication.channel,
-          direction: communication.direction,
-          communicationDate: toIso(communication.occurredAt),
-          communicationOutcome: communication.outcome ?? "",
-          communicationSummary: communication.summary,
-        });
+    while (true) {
+      const leads = await prisma.lead.findMany({
+        where,
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        skip,
+        take: pageSize,
+        include: {
+          communications: { orderBy: { occurredAt: "desc" }, take: 50 },
+          appointments: { orderBy: { scheduledAt: "asc" }, take: 50 },
+          policies: { orderBy: { createdAt: "desc" }, take: 50 },
+        },
+      });
+      if (leads.length === 0) break;
+
+      const filtered = search
+        ? leads.filter((lead) => {
+            const blob = `${lead.idNumber} ${lead.firstName ?? ""} ${lead.lastName ?? ""} ${lead.email ?? ""} ${lead.phone ?? ""} ${lead.city ?? ""}`.toLowerCase();
+            return blob.includes(search.toLowerCase());
+          })
+        : leads;
+
+      for (const lead of filtered) {
+        rows.push(rowFor(lead));
       }
-      for (const appointment of lead.appointments) {
-        push({
-          appointmentTitle: appointment.title,
-          appointmentDate: toIso(appointment.scheduledAt),
-          appointmentStatus: appointment.status,
-          appointmentNotes: appointment.notes ?? "",
-        });
-      }
-      for (const policy of lead.policies) {
-        push({
-          policyNumber: policy.policyNumber ?? "",
-          policyType: policy.type ?? "",
-          policyProvider: policy.provider ?? "",
-          policyStatus: policy.status ?? "",
-          premium: policy.premium?.toString() ?? "",
-          startDate: toDate(policy.startDate),
-          endDate: toDate(policy.endDate),
-        });
-      }
-      if (!wroteRelatedRow) rows.push(rowFor(lead, {}));
+
+      skip += leads.length;
+      if (leads.length < pageSize) break;
     }
 
     const csv = "\uFEFF" + rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
@@ -106,30 +82,56 @@ export async function GET(req: Request) {
   }
 }
 
-type ExportLead = Awaited<ReturnType<typeof prisma.lead.findMany>>[number] & {
+type ExportLead = {
+  idNumber: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  altPhone: string | null;
+  address: string | null;
+  city: string | null;
+  birthDate: Date | null;
+  gender: string | null;
   customerType: string;
+  status: string;
+  source: string | null;
+  notes: string | null;
+  communications: Array<{
+    channel: string;
+    direction: string;
+    outcome: string | null;
+    summary: string;
+    occurredAt: Date;
+  }>;
+  appointments: Array<{
+    title: string;
+    scheduledAt: Date;
+    status: string;
+    notes: string | null;
+  }>;
+  policies: Array<{
+    policyNumber: string | null;
+    type: string | null;
+    provider: string | null;
+    status: string | null;
+    premium: number | null;
+    startDate: Date | null;
+    endDate: Date | null;
+  }>;
 };
 
-type CsvRecord = {
-  policyNumber: string;
-  policyType: string;
-  policyProvider: string;
-  policyStatus: string;
-  premium: string;
-  startDate: string;
-  endDate: string;
-  channel: string;
-  direction: string;
-  communicationDate: string;
-  communicationOutcome: string;
-  communicationSummary: string;
-  appointmentTitle: string;
-  appointmentDate: string;
-  appointmentStatus: string;
-  appointmentNotes: string;
-};
-
-function rowFor(lead: ExportLead, fields: Partial<CsvRecord>): string[] {
+function rowFor(lead: ExportLead): string[] {
+  const latestPolicy = lead.policies[0];
+  const nextAppointment = lead.appointments.find((appointment) => appointment.status === "scheduled") ?? lead.appointments[0];
+  const communicationDate = joinValues(lead.communications.map((communication) => toIso(communication.occurredAt)));
+  const communicationOutcome = joinValues(lead.communications.map((communication) => communication.outcome ?? ""));
+  const communicationSummary = joinValues(
+    lead.communications.map((communication) => {
+      const date = toIso(communication.occurredAt);
+      return [date, communication.outcome, communication.summary].filter(Boolean).join(" - ");
+    }),
+  );
   return [
     lead.customerType,
     lead.idNumber,
@@ -144,24 +146,28 @@ function rowFor(lead: ExportLead, fields: Partial<CsvRecord>): string[] {
     lead.gender ?? "",
     lead.status,
     lead.source ?? "",
-    fields.policyNumber ?? "",
-    fields.policyType ?? "",
-    fields.policyProvider ?? "",
-    fields.policyStatus ?? "",
-    fields.premium ?? "",
-    fields.startDate ?? "",
-    fields.endDate ?? "",
-    fields.channel ?? "",
-    fields.direction ?? "",
-    fields.communicationDate ?? "",
-    fields.communicationOutcome ?? "",
-    fields.communicationSummary ?? "",
-    fields.appointmentTitle ?? "",
-    fields.appointmentDate ?? "",
-    fields.appointmentStatus ?? "",
-    fields.appointmentNotes ?? "",
+    latestPolicy?.policyNumber ?? "",
+    latestPolicy?.type ?? "",
+    latestPolicy?.provider ?? "",
+    latestPolicy?.status ?? "",
+    latestPolicy?.premium?.toString() ?? "",
+    toDate(latestPolicy?.startDate),
+    toDate(latestPolicy?.endDate),
+    joinValues(lead.communications.map((communication) => communication.channel)),
+    joinValues(lead.communications.map((communication) => communication.direction)),
+    communicationDate,
+    communicationOutcome,
+    communicationSummary,
+    nextAppointment?.title ?? "",
+    toIso(nextAppointment?.scheduledAt),
+    nextAppointment?.status ?? "",
+    nextAppointment?.notes ?? "",
     lead.notes ?? "",
   ];
+}
+
+function joinValues(values: Array<string | null | undefined>): string {
+  return values.filter((value): value is string => Boolean(value)).join(" | ");
 }
 
 function toDate(value: Date | null | undefined): string {
