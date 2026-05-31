@@ -13,7 +13,10 @@ type DbLead = {
   birthDate: Date | null;
   gender: string | null;
   source: string | null;
+  customerType: string;
   status: string;
+  lastCallOutcome: string | null;
+  nextFollowUpAt: Date | null;
   agentId: string | null;
   agencyId: string | null;
   metadata: string;
@@ -36,7 +39,10 @@ export type ApiLead = {
   birthDate?: string;
   gender?: string;
   source?: string;
+  customerType: string;
   status: string;
+  lastCallOutcome?: string;
+  nextFollowUpAt?: string;
   agentId?: string;
   agencyId?: string;
   metadata: Record<string, unknown>;
@@ -60,7 +66,10 @@ export function serializeLead(l: DbLead): ApiLead {
     birthDate: l.birthDate ? l.birthDate.toISOString().split("T")[0] : undefined,
     gender: l.gender ?? undefined,
     source: l.source ?? undefined,
+    customerType: l.customerType,
     status: l.status,
+    lastCallOutcome: l.lastCallOutcome ?? undefined,
+    nextFollowUpAt: l.nextFollowUpAt?.toISOString(),
     agentId: l.agentId ?? undefined,
     agencyId: l.agencyId ?? undefined,
     metadata: safeJSON<Record<string, unknown>>(l.metadata, {}),
@@ -106,6 +115,7 @@ type DbLeadComm = {
   leadId: string;
   channel: string;
   direction: string;
+  outcome: string | null;
   summary: string;
   occurredAt: Date;
   createdAt: Date;
@@ -117,8 +127,35 @@ export function serializeLeadComm(c: DbLeadComm) {
     leadId: c.leadId,
     channel: c.channel,
     direction: c.direction,
+    outcome: c.outcome ?? undefined,
     summary: c.summary,
     occurredAt: c.occurredAt.toISOString(),
     createdAt: c.createdAt.toISOString(),
+  };
+}
+
+type DbLeadAppointment = {
+  id: string;
+  leadId: string;
+  title: string;
+  scheduledAt: Date;
+  status: string;
+  notes: string | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export function serializeLeadAppointment(a: DbLeadAppointment) {
+  return {
+    id: a.id,
+    leadId: a.leadId,
+    title: a.title,
+    scheduledAt: a.scheduledAt.toISOString(),
+    status: a.status,
+    notes: a.notes ?? undefined,
+    createdById: a.createdById ?? undefined,
+    createdAt: a.createdAt.toISOString(),
+    updatedAt: a.updatedAt.toISOString(),
   };
 }

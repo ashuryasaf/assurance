@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/dal";
 import { handleError, ok, err } from "@/lib/api";
 import { parseCustomerFile, type ParsedRow } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
+import { customerTypeFromSource } from "@/lib/crm/workflow";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_ROWS = 5000;
@@ -123,6 +124,7 @@ export async function POST(req: Request) {
         birthDate: row.lead.birthDate ? new Date(row.lead.birthDate) : null,
         gender: row.lead.gender,
         source: row.lead.source ?? job.fileName,
+        customerType: customerTypeFromSource(row.lead.source ?? job.fileName),
         status: row.lead.status,
         notes: row.lead.notes,
       };

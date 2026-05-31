@@ -1,16 +1,19 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireRole, type CurrentUser } from "@/lib/dal";
+import { requireRole } from "@/lib/dal";
 import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { serializeLead } from "@/lib/crm/serializers";
 import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
+import { leadScopeFilter } from "@/lib/crm/access";
+import { CUSTOMER_TYPES, LEAD_STATUSES, customerTypeFromSource } from "@/lib/crm/workflow";
 
-function leadScopeFilter(me: CurrentUser) {
-  if (me.role === "super_admin" || me.role === "admin") return {};
-  if (me.role === "agency_owner" && me.agencyId) return { agencyId: me.agencyId };
-  // agents and sub-agents: their own leads OR leads assigned to them.
-  return { OR: [{ agentId: me.id }, { agencyId: me.agencyId ?? undefined }] };
+function isLeadStatus(value: string): value is (typeof LEAD_STATUSES)[number] {
+  return (LEAD_STATUSES as readonly string[]).includes(value);
+}
+
+function isCustomerType(value: string): value is (typeof CUSTOMER_TYPES)[number] {
+  return (CUSTOMER_TYPES as readonly string[]).includes(value);
 }
 
 export async function GET(req: Request) {
@@ -19,15 +22,28 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const search = url.searchParams.get("q")?.trim() ?? "";
     const status = url.searchParams.get("status");
+    const customerType = url.searchParams.get("customerType");
     const where: Record<string, unknown> = { ...leadScopeFilter(me) };
-    if (status) where.status = status;
+    if (status) {
+      if (!isLeadStatus(status)) return err(400, "Invalid lead status");
+      where.status = status;
+    }
+    if (customerType) {
+      if (!isCustomerType(customerType)) return err(400, "Invalid customer type");
+      where.customerType = customerType;
+    }
 
     const leads = await prisma.lead.findMany({
       where,
       orderBy: { updatedAt: "desc" },
       take: 500,
       include: {
-        _count: { select: { policies: true, communications: true } },
+        _count: { select: { policies: true, communications: true, appointments: true } },
+        appointments: {
+          where: { status: "scheduled" },
+          orderBy: { scheduledAt: "asc" },
+          take: 1,
+        },
       },
     });
 
@@ -43,6 +59,8 @@ export async function GET(req: Request) {
         ...serializeLead(l),
         policyCount: l._count.policies,
         communicationCount: l._count.communications,
+        appointmentCount: l._count.appointments,
+        nextAppointment: l.appointments[0]?.scheduledAt.toISOString(),
       })),
     });
   } catch (error) {
@@ -62,7 +80,8 @@ const createSchema = z.object({
   birthDate: z.string().optional(),
   gender: z.string().optional(),
   source: z.string().optional(),
-  status: z.string().optional(),
+  customerType: z.enum(CUSTOMER_TYPES).optional(),
+  status: z.enum(LEAD_STATUSES).optional(),
   notes: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -79,6 +98,8 @@ export async function POST(req: Request) {
       return err(403, "Lead belongs to another tenant");
     }
 
+    const customerType = body.customerType ?? (body.source ? customerTypeFromSource(body.source) : undefined);
+
     let lead;
     if (existing) {
       lead = await prisma.lead.update({
@@ -94,6 +115,7 @@ export async function POST(req: Request) {
           birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
           gender: body.gender ?? undefined,
           source: body.source ?? undefined,
+          customerType,
           status: body.status ?? undefined,
           notes: body.notes ?? undefined,
           ...(body.metadata && { metadata: JSON.stringify(body.metadata) }),
@@ -113,6 +135,7 @@ export async function POST(req: Request) {
           birthDate: body.birthDate ? new Date(body.birthDate) : null,
           gender: body.gender,
           source: body.source,
+          customerType: customerType ?? "general",
           status: body.status ?? "new",
           notes: body.notes,
           metadata: JSON.stringify(body.metadata ?? {}),

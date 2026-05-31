@@ -1,22 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { HttpError, requireRole, type CurrentUser } from "@/lib/dal";
+import { HttpError, requireRole } from "@/lib/dal";
 import { handleError, ok, parseJSON, err } from "@/lib/api";
-import { serializeLead, serializeLeadPolicy, serializeLeadComm } from "@/lib/crm/serializers";
-
-function canSeeLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
-  if (me.role === "super_admin" || me.role === "admin") return true;
-  if (me.agencyId && lead.agencyId === me.agencyId) return true;
-  if (lead.agentId === me.id) return true;
-  return false;
-}
-
-async function loadLead(idOrIdNumber: string) {
-  // Allow looking up by either internal cuid id or by the unique idNumber.
-  const byId = await prisma.lead.findUnique({ where: { id: idOrIdNumber } });
-  if (byId) return byId;
-  return prisma.lead.findUnique({ where: { idNumber: idOrIdNumber } });
-}
+import { serializeLead, serializeLeadPolicy, serializeLeadComm, serializeLeadAppointment } from "@/lib/crm/serializers";
+import { canSeeLead, loadLead } from "@/lib/crm/access";
+import { CUSTOMER_TYPES, LEAD_STATUSES, parseRequiredDate } from "@/lib/crm/workflow";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -26,9 +14,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (!lead) return err(404, "Lead not found");
     if (!canSeeLead(me, lead)) throw new HttpError(403, "Forbidden");
 
-    const [policies, communications, importRows] = await Promise.all([
+    const [policies, communications, appointments, importRows] = await Promise.all([
       prisma.leadPolicy.findMany({ where: { leadId: lead.id }, orderBy: { createdAt: "desc" } }),
       prisma.leadCommunication.findMany({ where: { leadId: lead.id }, orderBy: { occurredAt: "desc" } }),
+      prisma.leadAppointment.findMany({ where: { leadId: lead.id }, orderBy: { scheduledAt: "asc" } }),
       prisma.leadImportRow.findMany({
         where: { leadId: lead.id },
         orderBy: { id: "desc" },
@@ -41,6 +30,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       lead: serializeLead(lead),
       policies: policies.map(serializeLeadPolicy),
       communications: communications.map(serializeLeadComm),
+      appointments: appointments.map(serializeLeadAppointment),
       imports: importRows.map((r) => ({
         id: r.id,
         rowIndex: r.rowIndex,
@@ -67,7 +57,8 @@ const patchSchema = z.object({
   birthDate: z.string().optional(),
   gender: z.string().optional(),
   source: z.string().optional(),
-  status: z.string().optional(),
+  customerType: z.enum(CUSTOMER_TYPES).optional(),
+  status: z.enum(LEAD_STATUSES).optional(),
   notes: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -80,6 +71,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!lead) return err(404, "Lead not found");
     if (!canSeeLead(me, lead)) throw new HttpError(403, "Forbidden");
     const body = await parseJSON(req, patchSchema);
+    const birthDate = body.birthDate !== undefined && body.birthDate ? parseRequiredDate(body.birthDate) : null;
+    if (body.birthDate && !birthDate) return err(400, "Invalid birth date");
+
     const updated = await prisma.lead.update({
       where: { id: lead.id },
       data: {
@@ -90,9 +84,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ...(body.altPhone !== undefined && { altPhone: body.altPhone }),
         ...(body.address !== undefined && { address: body.address }),
         ...(body.city !== undefined && { city: body.city }),
-        ...(body.birthDate !== undefined && { birthDate: body.birthDate ? new Date(body.birthDate) : null }),
+        ...(body.birthDate !== undefined && { birthDate }),
         ...(body.gender !== undefined && { gender: body.gender }),
         ...(body.source !== undefined && { source: body.source }),
+        ...(body.customerType !== undefined && { customerType: body.customerType }),
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
         ...(body.metadata !== undefined && { metadata: JSON.stringify(body.metadata) }),

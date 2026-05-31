@@ -4,6 +4,8 @@ import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { HttpError, requireRole } from "@/lib/dal";
 import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
+import { safeJSON } from "@/lib/json";
+import { customerTypeFromSource } from "@/lib/crm/workflow";
 
 const patchSchema = z.object({
   status: z.enum(["new", "contacted", "scheduled", "qualified", "lost"]).optional(),
@@ -96,63 +98,64 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const [firstName, ...rest] = lead.fullName.trim().split(/\s+/);
     const lastName = rest.join(" ") || undefined;
-
-    const crmLead = await prisma.lead.upsert({
-      where: { idNumber: idNumberDigits },
-      create: {
-        idNumber: idNumberDigits,
-        firstName,
-        lastName,
-        phone: lead.phone,
-        email: lead.email,
-        notes: lead.notes,
-        source: lead.source ?? `${lead.campaignType}-landing`,
-        status: "new",
-        agentId: me.id,
-        agencyId: me.agencyId ?? null,
-        metadata: JSON.stringify({
-          campaignType: lead.campaignType,
-          preferredTime: lead.preferredTime,
-          utm: {
-            source: lead.utmSource,
-            medium: lead.utmMedium,
-            campaign: lead.utmCampaign,
-            term: lead.utmTerm,
-            content: lead.utmContent,
-          },
-          referrer: lead.referrer,
-          landingLeadId: lead.id,
-        }),
+    const landingMetadata = {
+      campaignType: lead.campaignType,
+      preferredTime: lead.preferredTime,
+      utm: {
+        source: lead.utmSource,
+        medium: lead.utmMedium,
+        campaign: lead.utmCampaign,
+        term: lead.utmTerm,
+        content: lead.utmContent,
       },
-      update: {
-        firstName: firstName ?? undefined,
-        lastName: lastName ?? undefined,
-        phone: lead.phone,
-        email: lead.email ?? undefined,
-        notes: lead.notes ?? undefined,
-        metadata: JSON.stringify({
-          campaignType: lead.campaignType,
-          preferredTime: lead.preferredTime,
-          utm: {
-            source: lead.utmSource,
-            medium: lead.utmMedium,
-            campaign: lead.utmCampaign,
-            term: lead.utmTerm,
-            content: lead.utmContent,
-          },
-          referrer: lead.referrer,
-          landingLeadId: lead.id,
-        }),
-      },
+      referrer: lead.referrer,
+      landingLeadId: lead.id,
+    };
+    const metadata = JSON.stringify({
+      ...(existingCrmLead ? safeJSON<Record<string, unknown>>(existingCrmLead.metadata, {}) : {}),
+      ...landingMetadata,
     });
+    const customerType = customerTypeFromSource(lead.campaignType);
 
-    const updated = await prisma.realEstateLead.update({
-      where: { id },
-      data: {
-        status: "converted",
-        convertedLeadId: crmLead.id,
-        assignedAgentId: lead.assignedAgentId ?? me.id,
-      },
+    const { crmLead, updated } = await prisma.$transaction(async (tx) => {
+      const crmLead = await tx.lead.upsert({
+        where: { idNumber: idNumberDigits },
+        create: {
+          idNumber: idNumberDigits,
+          firstName,
+          lastName,
+          phone: lead.phone,
+          email: lead.email,
+          notes: lead.notes,
+          source: lead.source ?? `${lead.campaignType}-landing`,
+          customerType,
+          status: "new",
+          agentId: me.id,
+          agencyId: me.agencyId ?? null,
+          metadata,
+        },
+        update: {
+          firstName: firstName ?? undefined,
+          lastName: lastName ?? undefined,
+          phone: lead.phone,
+          email: lead.email ?? undefined,
+          notes: lead.notes ?? undefined,
+          source: lead.source ?? `${lead.campaignType}-landing`,
+          customerType,
+          metadata,
+        },
+      });
+
+      const updated = await tx.realEstateLead.update({
+        where: { id },
+        data: {
+          status: "converted",
+          convertedLeadId: crmLead.id,
+          assignedAgentId: lead.assignedAgentId ?? me.id,
+        },
+      });
+
+      return { crmLead, updated };
     });
 
     return ok({
