@@ -89,6 +89,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         return err(400, "Cannot mark a lead as scheduled without an upcoming appointment");
       }
       // A lost lead is terminal and must not retain a future follow-up.
+
       nextFollowUpAt = body.status === "lost" ? null : upcoming?.scheduledAt ?? null;
     }
 

@@ -6,7 +6,7 @@ import { serializeLead } from "@/lib/crm/serializers";
 import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
 import { safeJSON } from "@/lib/json";
-import { leadScopeFilter } from "@/lib/crm/access";
+import { canAccessCustomerType, leadScopeFilter } from "@/lib/crm/access";
 import { CUSTOMER_TYPES, LEAD_STATUSES, customerTypeFromSource, parseRequiredDate } from "@/lib/crm/workflow";
 
 function isLeadStatus(value: string): value is (typeof LEAD_STATUSES)[number] {
@@ -104,6 +104,7 @@ export async function POST(req: Request) {
 
     const birthDate = body.birthDate ? parseRequiredDate(body.birthDate) : null;
     if (body.birthDate && !birthDate) return err(400, "Invalid birth date");
+    if (body.status === "scheduled") return err(400, "Use appointment scheduling to set a lead as scheduled");
 
     // Appointments are the source of truth for scheduling: a lead can't be
     // marked "scheduled" without an upcoming appointment.
@@ -119,6 +120,8 @@ export async function POST(req: Request) {
 
     const inferredCustomerType = body.source ? customerTypeFromSource(body.source) : undefined;
     const customerType = body.customerType ?? inferredCustomerType;
+    const effectiveCustomerType = customerType ?? existing?.customerType ?? "general";
+    if (!canAccessCustomerType(me, effectiveCustomerType)) return err(403, "Agent is not allowed to access this CRM data type");
 
     let lead;
     if (existing) {

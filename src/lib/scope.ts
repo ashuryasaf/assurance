@@ -1,7 +1,9 @@
 import "server-only";
 import type { CurrentUser } from "@/lib/dal";
+import { canAccessCustomerType } from "@/lib/crm/access";
 
-export function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
+export function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null; customerType?: string | null }): boolean {
+  if (!canAccessCustomerType(me, lead.customerType)) return false;
   if (me.role === "super_admin" || me.role === "admin") return true;
   if (lead.agentId === me.id) return true;
   if (me.agencyId && lead.agencyId === me.agencyId) return true;

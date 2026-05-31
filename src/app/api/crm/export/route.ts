@@ -6,13 +6,14 @@ import { leadScopeFilter } from "@/lib/crm/access";
 import { CUSTOMER_TYPES, LEAD_STATUSES } from "@/lib/crm/workflow";
 
 const HEADERS = [
+  "record_type",
   "customer_id",
   "id_number",
   "first_name",
   "last_name",
   "full_name",
   "customer_type",
-  "status",
+  "lead_status",
   "last_call_outcome",
   "next_follow_up_at",
   "phone",
@@ -22,24 +23,19 @@ const HEADERS = [
   "address",
   "source",
   "customer_notes",
-  "communication_date",
-  "communication_channel",
-  "communication_direction",
-  "communication_outcome",
-  "communication_notes",
-  "appointment_date",
-  "appointment_status",
-  "appointment_title",
-  "appointment_notes",
+  "record_date",
+  "record_status",
+  "record_channel",
+  "record_direction",
+  "record_outcome",
+  "record_title",
+  "record_notes",
   "policy_number",
   "policy_type",
   "policy_provider",
-  "policy_status",
   "policy_premium",
   "import_file",
   "import_row",
-  "import_status",
-  "imported_at",
   "created_at",
   "updated_at",
 ];
@@ -93,86 +89,55 @@ export async function GET(req: Request) {
 
     const rows = [HEADERS];
     for (const lead of filtered) {
-      const leadCols = [
-        lead.id,
-        lead.idNumber,
-        lead.firstName ?? "",
-        lead.lastName ?? "",
-        [lead.firstName, lead.lastName].filter(Boolean).join(" "),
-        lead.customerType,
-        lead.status,
-        lead.lastCallOutcome ?? "",
-        toIso(lead.nextFollowUpAt),
-        lead.phone ?? "",
-        lead.altPhone ?? "",
-        lead.email ?? "",
-        lead.city ?? "",
-        lead.address ?? "",
-        lead.source ?? "",
-        lead.notes ?? "",
-      ];
-      const tailCols = [lead.createdAt.toISOString(), lead.updatedAt.toISOString()];
-      const blankComm = ["", "", "", "", ""];
-      const blankAppointment = ["", "", "", ""];
-      const blankPolicy = ["", "", "", "", ""];
-      const blankImport = ["", "", "", ""];
-
-      // Each related record gets its own row so unrelated communications,
-      // appointments, policies, and import rows are never zipped together.
-      const pushRow = (comm: string[], appointment: string[], policy: string[], importRow: string[]) =>
-        rows.push([...leadCols, ...comm, ...appointment, ...policy, ...importRow, ...tailCols]);
+      rows.push(baseRow(lead, "customer", {
+        recordDate: lead.updatedAt,
+        recordStatus: lead.status,
+        recordNotes: lead.notes ?? "",
+      }));
 
       for (const communication of lead.communications) {
-        pushRow(
-          [
-            toIso(communication.occurredAt),
-            communication.channel ?? "",
-            communication.direction ?? "",
-            communication.outcome ?? "",
-            communication.summary ?? "",
-          ],
-          blankAppointment,
-          blankPolicy,
-          blankImport,
-        );
+        rows.push(baseRow(lead, "communication", {
+          recordDate: communication.occurredAt,
+          recordChannel: communication.channel,
+          recordDirection: communication.direction,
+          recordOutcome: communication.outcome ?? "",
+          recordNotes: communication.summary,
+          createdAt: communication.createdAt,
+        }));
       }
+
       for (const appointment of lead.appointments) {
-        pushRow(
-          blankComm,
-          [toIso(appointment.scheduledAt), appointment.status ?? "", appointment.title ?? "", appointment.notes ?? ""],
-          blankPolicy,
-          blankImport,
-        );
+        rows.push(baseRow(lead, "appointment", {
+          recordDate: appointment.scheduledAt,
+          recordStatus: appointment.status,
+          recordTitle: appointment.title,
+          recordNotes: appointment.notes ?? "",
+          createdAt: appointment.createdAt,
+          updatedAt: appointment.updatedAt,
+        }));
       }
+
       for (const policy of lead.policies) {
-        pushRow(
-          blankComm,
-          blankAppointment,
-          [
-            policy.policyNumber ?? "",
-            policy.type ?? "",
-            policy.provider ?? "",
-            policy.status ?? "",
-            policy.premium?.toString() ?? "",
-          ],
-          blankImport,
-        );
+        rows.push(baseRow(lead, "policy", {
+          recordDate: policy.createdAt,
+          recordStatus: policy.status ?? "",
+          policyNumber: policy.policyNumber ?? "",
+          policyType: policy.type ?? "",
+          policyProvider: policy.provider ?? "",
+          policyPremium: policy.premium?.toString() ?? "",
+          createdAt: policy.createdAt,
+        }));
       }
+
       for (const importRow of lead.importRows) {
-        pushRow(blankComm, blankAppointment, blankPolicy, [
-          importRow.import.fileName ?? "",
-          String(importRow.rowIndex + 1),
-          importRow.status ?? "",
-          toIso(importRow.import.createdAt),
-        ]);
-      }
-      if (
-        lead.communications.length === 0 &&
-        lead.appointments.length === 0 &&
-        lead.policies.length === 0 &&
-        lead.importRows.length === 0
-      ) {
-        pushRow(blankComm, blankAppointment, blankPolicy, blankImport);
+        rows.push(baseRow(lead, "import_reference", {
+          recordDate: importRow.import.createdAt,
+          recordStatus: importRow.status,
+          recordNotes: importRow.error ?? "",
+          importFile: importRow.import.fileName,
+          importRow: String(importRow.rowIndex + 1),
+          createdAt: importRow.import.createdAt,
+        }));
       }
     }
 
@@ -188,6 +153,67 @@ export async function GET(req: Request) {
   } catch (error) {
     return handleError(error);
   }
+}
+
+type ExportLead = Awaited<ReturnType<typeof prisma.lead.findMany>>[number] & {
+  customerType: string;
+  lastCallOutcome: string | null;
+  nextFollowUpAt: Date | null;
+};
+
+type RecordFields = {
+  recordDate?: Date | null;
+  recordStatus?: string;
+  recordChannel?: string;
+  recordDirection?: string;
+  recordOutcome?: string;
+  recordTitle?: string;
+  recordNotes?: string;
+  policyNumber?: string;
+  policyType?: string;
+  policyProvider?: string;
+  policyPremium?: string;
+  importFile?: string;
+  importRow?: string;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+};
+
+function baseRow(lead: ExportLead, recordType: string, fields: RecordFields): string[] {
+  return [
+    recordType,
+    lead.id,
+    lead.idNumber,
+    lead.firstName ?? "",
+    lead.lastName ?? "",
+    [lead.firstName, lead.lastName].filter(Boolean).join(" "),
+    lead.customerType,
+    lead.status,
+    lead.lastCallOutcome ?? "",
+    toIso(lead.nextFollowUpAt),
+    lead.phone ?? "",
+    lead.altPhone ?? "",
+    lead.email ?? "",
+    lead.city ?? "",
+    lead.address ?? "",
+    lead.source ?? "",
+    lead.notes ?? "",
+    toIso(fields.recordDate),
+    fields.recordStatus ?? "",
+    fields.recordChannel ?? "",
+    fields.recordDirection ?? "",
+    fields.recordOutcome ?? "",
+    fields.recordTitle ?? "",
+    fields.recordNotes ?? "",
+    fields.policyNumber ?? "",
+    fields.policyType ?? "",
+    fields.policyProvider ?? "",
+    fields.policyPremium ?? "",
+    fields.importFile ?? "",
+    fields.importRow ?? "",
+    toIso(fields.createdAt ?? lead.createdAt),
+    toIso(fields.updatedAt ?? lead.updatedAt),
+  ];
 }
 
 function toIso(value: Date | null | undefined): string {

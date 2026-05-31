@@ -64,6 +64,7 @@ model InviteToken {
   parentAgentId String?
   issuedById    String?
   issuedBy      User?     @relation("InviteIssuer", fields: [issuedById], references: [id])
+  permissions   String?
   usedAt        DateTime?
   expiresAt     DateTime
   createdAt     DateTime  @default(now())

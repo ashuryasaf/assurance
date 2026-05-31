@@ -4,6 +4,7 @@ import { handleError, ok, err } from "@/lib/api";
 import { parseCustomerFile, type ParsedRow } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
 import { customerTypeFromSource } from "@/lib/crm/workflow";
+import { canAccessCustomerType } from "@/lib/crm/access";
 import { safeJSON } from "@/lib/json";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -125,7 +126,21 @@ export async function POST(req: Request) {
         result = await prisma.$transaction(async (tx) => {
           const existing = await tx.lead.findUnique({ where: { idNumber } });
 
-          if (existing && !canModifyLead(me, existing)) {
+          if (!existing && !canAccessCustomerType(me, inferredCustomerType)) {
+          await tx.leadImportRow.create({
+            data: {
+              importId: job.id,
+              rowIndex: row.rowIndex,
+              status: "error",
+              raw: JSON.stringify(row.raw),
+              error: "Agent is not allowed to import this CRM data type",
+              idNumber,
+            },
+          });
+          return { rowStatus: "error" as const };
+        }
+
+        if (existing && !canModifyLead(me, existing)) {
             await tx.leadImportRow.create({
               data: {
                 importId: job.id,

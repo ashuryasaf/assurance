@@ -6,6 +6,7 @@ import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
 import { safeJSON } from "@/lib/json";
 import { customerTypeFromSource } from "@/lib/crm/workflow";
+import { crmCustomerTypesFromPermissions } from "@/lib/crm/access";
 
 const patchSchema = z.object({
   status: z.enum(["new", "contacted", "scheduled", "qualified", "lost"]).optional(),
@@ -30,7 +31,12 @@ async function canAssignLandingLead(me: { role: string; id: string; agencyId?: s
   return assignee.agencyId === me.agencyId;
 }
 
-async function canAccessLandingLead(me: { role: string; id: string; agencyId?: string }, lead: { assignedAgentId: string | null }) {
+async function canAccessLandingLead(me: { role: string; id: string; agencyId?: string; permissions: string[] }, lead: { assignedAgentId: string | null; campaignType?: string }) {
+  if (me.role !== "super_admin" && me.role !== "admin" && me.role !== "agency_owner") {
+    const allowedTypes = crmCustomerTypesFromPermissions(me.permissions);
+    const leadType = customerTypeFromSource(lead.campaignType);
+    if (allowedTypes && !allowedTypes.includes(leadType)) return false;
+  }
   if (me.role === "super_admin" || me.role === "admin") return true;
   if (!lead.assignedAgentId) return true;
   if (lead.assignedAgentId === me.id) return true;

@@ -25,6 +25,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const occurredAt = body.occurredAt ? parseRequiredDate(body.occurredAt) : new Date();
     if (!occurredAt) return err(400, "Invalid communication date");
 
+    const existingUpcomingAppointment = await prisma.leadAppointment.findFirst({
+      where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date() } },
+      select: { id: true },
+    });
+    if (body.outcome === "appointment_scheduled" && !existingUpcomingAppointment) {
+      return err(400, "Create an appointment before recording an appointment_scheduled outcome");
+    }
+
     const created = await prisma.$transaction(async (tx) => {
       const communication = await tx.leadCommunication.create({
         data: {
@@ -47,6 +55,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date() } },
           select: { id: true },
         });
+
         const nextStatus =
           derivedStatus &&
           derivedStatus !== "scheduled" &&

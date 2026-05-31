@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/dal";
 import { handleError, ok } from "@/lib/api";
 import { safeJSON } from "@/lib/json";
 import { hasPermission } from "@/lib/types";
+import { crmCustomerTypeLabelsFromPermissions } from "@/lib/crm/access";
 
 export async function GET() {
   try {
@@ -44,7 +45,9 @@ export async function GET() {
           regulatoryStatus: sub.regulatoryStatus,
           createdAt: sub.createdAt.toISOString().split("T")[0],
         })),
-        agents: a.agents.map((u) => ({
+        agents: a.agents.map((u) => {
+          const permissions = safeJSON<string[]>(u.permissions, []);
+          return {
           id: u.id,
           email: u.email,
           firstName: u.firstName,
@@ -52,7 +55,8 @@ export async function GET() {
           phone: u.phone,
           idNumber: u.idNumber,
           role: u.role,
-          permissions: safeJSON<string[]>(u.permissions, []),
+          permissions,
+          crmCustomerTypes: crmCustomerTypeLabelsFromPermissions(permissions),
           licenseNumber: u.licenseNumber ?? undefined,
           specializations: u.specializations
             ? safeJSON<string[]>(u.specializations, [])
@@ -61,7 +65,8 @@ export async function GET() {
           createdAt: u.createdAt.toISOString().split("T")[0],
           lastLogin: u.lastLogin?.toISOString().split("T")[0],
           agencyId: u.agencyId ?? undefined,
-        })),
+          };
+        }),
       })),
     });
   } catch (error) {

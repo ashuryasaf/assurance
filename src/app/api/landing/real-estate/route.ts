@@ -2,9 +2,22 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { requireRole } from "@/lib/dal";
+import { crmCustomerTypesFromPermissions } from "@/lib/crm/access";
 import { checkRate, clientIp } from "@/lib/throttle";
 
 const CAMPAIGN_TYPES = ["real-estate", "insurance", "investments", "kadima-real-estate"] as const;
+const REAL_ESTATE_CAMPAIGNS = ["real-estate", "kadima-real-estate"];
+const GENERAL_CAMPAIGNS = ["insurance", "investments"];
+
+function landingCampaignScope(me: { role: string; permissions: string[] }): string[] | undefined {
+  if (me.role === "super_admin" || me.role === "admin" || me.role === "agency_owner") return undefined;
+  const customerTypes = crmCustomerTypesFromPermissions(me.permissions);
+  if (!customerTypes) return undefined;
+  const campaigns = new Set<string>();
+  if (customerTypes.includes("real_estate")) REAL_ESTATE_CAMPAIGNS.forEach((campaign) => campaigns.add(campaign));
+  if (customerTypes.includes("general")) GENERAL_CAMPAIGNS.forEach((campaign) => campaigns.add(campaign));
+  return Array.from(campaigns);
+}
 
 const submissionSchema = z.object({
   fullName: z.string().trim().min(2, "נדרש שם מלא").max(80),
@@ -108,7 +121,13 @@ export async function GET(req: Request) {
     const campaignTypeFilter = url.searchParams.get("campaignType");
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
-    if (campaignTypeFilter) where.campaignType = campaignTypeFilter;
+    const campaignScope = landingCampaignScope(me);
+    if (campaignTypeFilter) {
+      if (campaignScope && !campaignScope.includes(campaignTypeFilter)) return ok({ leads: [] });
+      where.campaignType = campaignTypeFilter;
+    } else if (campaignScope) {
+      where.campaignType = { in: campaignScope };
+    }
     if (me.role !== "super_admin" && me.role !== "admin") {
       if (me.role === "agency_owner" && me.agencyId) {
         const agencyAgents = await prisma.user.findMany({
