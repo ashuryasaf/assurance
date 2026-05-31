@@ -25,7 +25,9 @@ export async function GET(req: Request) {
     const status = url.searchParams.get("status");
     const customerType = url.searchParams.get("customerType");
     const where: Record<string, unknown> = { ...leadScopeFilter(me) };
-    const upcomingCutoff = new Date(Date.now() - 60 * 60 * 1000);
+    // The next follow-up must be a genuinely upcoming appointment; an overdue
+    // slot that is still "scheduled" should never be reported as the next one.
+    const upcomingCutoff = new Date();
     if (status) {
       if (!isLeadStatus(status)) return err(400, "Invalid lead status");
       where.status = status;

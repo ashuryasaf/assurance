@@ -115,6 +115,8 @@ export async function POST(req: Request) {
         gender: leadRow.gender,
         source,
         status: importedStatus,
+        // A lost lead is terminal and must not retain a future follow-up.
+        nextFollowUpAt: importedStatus === "lost" ? null : undefined,
         notes: leadRow.notes,
       };
 

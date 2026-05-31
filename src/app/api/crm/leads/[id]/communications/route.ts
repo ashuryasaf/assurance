@@ -64,6 +64,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           data: {
             ...(recordOutcome && { lastCallOutcome: recordOutcome }),
             ...(nextStatus && { status: nextStatus }),
+            // A lost lead is terminal and must not retain a future follow-up.
+            ...(nextStatus === "lost" && { nextFollowUpAt: null }),
           },
         });
       }
