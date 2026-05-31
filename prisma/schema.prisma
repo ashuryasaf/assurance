@@ -33,14 +33,14 @@ model User {
   createdAt       DateTime  @default(now())
   lastLogin       DateTime?
 
-  agency           Agency?      @relation("UserAgency", fields: [agencyId], references: [id])
-  parentAgent      User?        @relation("AgentHierarchy", fields: [parentAgentId], references: [id])
-  subAgents        User[]       @relation("AgentHierarchy")
-  ownedAgencies    Agency[]     @relation("AgencyOwner")
-  policiesAsClient Policy[]     @relation("ClientPolicies")
-  policiesAsAgent  Policy[]     @relation("AgentPolicies")
-  documents        Document[]   @relation("ClientDocuments")
-  uploadedDocs     Document[]   @relation("UploaderDocuments")
+  agency           Agency?              @relation("UserAgency", fields: [agencyId], references: [id])
+  parentAgent      User?                @relation("AgentHierarchy", fields: [parentAgentId], references: [id])
+  subAgents        User[]               @relation("AgentHierarchy")
+  ownedAgencies    Agency[]             @relation("AgencyOwner")
+  policiesAsClient Policy[]             @relation("ClientPolicies")
+  policiesAsAgent  Policy[]             @relation("AgentPolicies")
+  documents        Document[]           @relation("ClientDocuments")
+  uploadedDocs     Document[]           @relation("UploaderDocuments")
   reports          Report[]
   bankConnections  BankConnection[]
   portfolio        InvestmentPortfolio?
@@ -48,7 +48,8 @@ model User {
   conversations    AIConversation[]
   affiliates       Affiliate[]
   regulatoryRpts   RegulatoryReport[]
-  invitesIssued    InviteToken[] @relation("InviteIssuer")
+  invitesIssued    InviteToken[]        @relation("InviteIssuer")
+  leadAppointments LeadAppointment[]    @relation("LeadAppointmentCreator")
 
   @@index([role])
   @@index([agencyId])
@@ -63,6 +64,7 @@ model InviteToken {
   parentAgentId String?
   issuedById    String?
   issuedBy      User?     @relation("InviteIssuer", fields: [issuedById], references: [id])
+  permissions   String?
   usedAt        DateTime?
   expiresAt     DateTime
   createdAt     DateTime  @default(now())
@@ -92,24 +94,24 @@ model Agency {
 // -----------------------------------------------------------------------------
 
 model Policy {
-  id                String   @id @default(cuid())
-  policyNumber      String   @unique
-  type              String
-  provider          String
-  status            String
-  premium           Float
-  premiumFrequency  String
-  startDate         DateTime
-  endDate           DateTime
-  coverageAmount    Float
-  clientId          String
-  client            User     @relation("ClientPolicies", fields: [clientId], references: [id])
-  agentId           String
-  agent             User     @relation("AgentPolicies", fields: [agentId], references: [id])
-  details           String
-  createdAt         DateTime @default(now())
-  lastUpdated       DateTime @updatedAt
-  documents         Document[]
+  id               String     @id @default(cuid())
+  policyNumber     String     @unique
+  type             String
+  provider         String
+  status           String
+  premium          Float
+  premiumFrequency String
+  startDate        DateTime
+  endDate          DateTime
+  coverageAmount   Float
+  clientId         String
+  client           User       @relation("ClientPolicies", fields: [clientId], references: [id])
+  agentId          String
+  agent            User       @relation("AgentPolicies", fields: [agentId], references: [id])
+  details          String
+  createdAt        DateTime   @default(now())
+  lastUpdated      DateTime   @updatedAt
+  documents        Document[]
 
   @@index([clientId])
   @@index([agentId])
@@ -117,23 +119,23 @@ model Policy {
 }
 
 model Document {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   name          String
   type          String
   mimeType      String
   size          Int
   storagePath   String?
-  status        String    @default("pending")
+  status        String   @default("pending")
   policyId      String?
-  policy        Policy?   @relation(fields: [policyId], references: [id])
+  policy        Policy?  @relation(fields: [policyId], references: [id])
   clientId      String
-  client        User      @relation("ClientDocuments", fields: [clientId], references: [id])
+  client        User     @relation("ClientDocuments", fields: [clientId], references: [id])
   uploadedById  String
-  uploadedBy    User      @relation("UploaderDocuments", fields: [uploadedById], references: [id])
-  tags          String    @default("[]")
+  uploadedBy    User     @relation("UploaderDocuments", fields: [uploadedById], references: [id])
+  tags          String   @default("[]")
   aiAnalysis    String?
   signatureData String?
-  uploadDate    DateTime  @default(now())
+  uploadDate    DateTime @default(now())
 
   @@index([clientId])
   @@index([status])
@@ -283,40 +285,46 @@ model ActivityLog {
 // -----------------------------------------------------------------------------
 
 model Lead {
-  id           String   @id @default(cuid())
-  idNumber     String   @unique
-  firstName    String?
-  lastName     String?
-  email        String?
-  phone        String?
-  altPhone     String?
-  address      String?
-  city         String?
-  birthDate    DateTime?
-  gender       String?
-  source       String?
-  status       String   @default("new") // new | contacted | qualified | customer | lost
-  agentId      String?
-  agencyId     String?
-  metadata     String   @default("{}")  // JSON: free-form/extra columns from imports
-  notes        String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String    @id @default(cuid())
+  idNumber        String    @unique
+  firstName       String?
+  lastName        String?
+  email           String?
+  phone           String?
+  altPhone        String?
+  address         String?
+  city            String?
+  birthDate       DateTime?
+  gender          String?
+  source          String?
+  customerType    String    @default("general") // general | real_estate
+  status          String    @default("new") // new | contacted | scheduled | qualified | customer | lost
+  lastCallOutcome String? // called | no_answer | interested | not_interested | follow_up | appointment_scheduled | wrong_number
+  nextFollowUpAt  DateTime?
+  agentId         String?
+  agencyId        String?
+  metadata        String    @default("{}") // JSON: free-form/extra columns from imports
+  notes           String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   policies       LeadPolicy[]
   communications LeadCommunication[]
+  appointments   LeadAppointment[]
   importRows     LeadImportRow[]
 
   @@index([agencyId])
   @@index([agentId])
   @@index([status])
+  @@index([customerType])
+  @@index([nextFollowUpAt])
 }
 
 model LeadPolicy {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   leadId       String
-  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead         Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   policyNumber String?
   type         String?
   provider     String?
@@ -324,8 +332,8 @@ model LeadPolicy {
   premium      Float?
   startDate    DateTime?
   endDate      DateTime?
-  raw          String   @default("{}")
-  createdAt    DateTime @default(now())
+  raw          String    @default("{}")
+  createdAt    DateTime  @default(now())
 
   @@index([leadId])
 }
@@ -334,13 +342,34 @@ model LeadCommunication {
   id         String   @id @default(cuid())
   leadId     String
   lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  channel    String   // phone | email | whatsapp | sms | meeting | other
+  channel    String // phone | email | whatsapp | sms | meeting | other
   direction  String   @default("outbound") // outbound | inbound
+  outcome    String? // called | no_answer | interested | not_interested | follow_up | appointment_scheduled | wrong_number
   summary    String
   occurredAt DateTime @default(now())
   createdAt  DateTime @default(now())
 
   @@index([leadId])
+  @@index([outcome])
+}
+
+model LeadAppointment {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  title       String
+  scheduledAt DateTime
+  status      String   @default("scheduled") // scheduled | completed | cancelled
+  notes       String?
+  createdById String?
+  createdBy   User?    @relation("LeadAppointmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([createdById])
 }
 
 model CustomerImport {
@@ -366,8 +395,8 @@ model LeadImportRow {
   lead     Lead?          @relation(fields: [leadId], references: [id])
   idNumber String?
   rowIndex Int
-  status   String  // created | updated | skipped | error
-  raw      String  // JSON of the original row
+  status   String // created | updated | skipped | error
+  raw      String // JSON of the original row
   error    String?
 
   @@index([importId])
@@ -385,10 +414,10 @@ model RealEstateLead {
   fullName        String
   phone           String
   email           String?
-  preferredTime   String   // 'morning' | 'noon' | 'evening'
+  preferredTime   String // 'morning' | 'noon' | 'evening'
   notes           String?
   campaignType    String   @default("real-estate") // 'real-estate' | 'insurance' | 'investments'
-  source          String?  // free-text source label (e.g. campaign name)
+  source          String? // free-text source label (e.g. campaign name)
   utmSource       String?
   utmMedium       String?
   utmCampaign     String?
@@ -399,7 +428,7 @@ model RealEstateLead {
   userAgent       String?
   status          String   @default("new") // new | contacted | scheduled | qualified | converted | lost
   assignedAgentId String?
-  convertedLeadId String?  // FK into Lead.id once an agent enriches with idNumber
+  convertedLeadId String? // FK into Lead.id once an agent enriches with idNumber
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

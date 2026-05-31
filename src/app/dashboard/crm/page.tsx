@@ -3,6 +3,9 @@
 import { apiFetch, useApi } from '@/lib/client-api';
 import { useState, useRef } from 'react';
 
+type CustomerType = 'general' | 'real_estate';
+type CallOutcome = 'called' | 'no_answer' | 'interested' | 'not_interested' | 'follow_up' | 'appointment_scheduled' | 'wrong_number';
+
 type LeadListItem = {
   id: string;
   idNumber: string;
@@ -11,9 +14,14 @@ type LeadListItem = {
   email?: string;
   phone?: string;
   city?: string;
+  customerType: CustomerType;
   status: string;
+  lastCallOutcome?: CallOutcome;
+  nextFollowUpAt?: string;
+  nextAppointment?: string;
   policyCount: number;
   communicationCount: number;
+  appointmentCount: number;
   updatedAt: string;
   source?: string;
 };
@@ -43,8 +51,18 @@ type LeadDetail = {
     id: string;
     channel: string;
     direction: string;
+    outcome?: CallOutcome;
     summary: string;
     occurredAt: string;
+  }>;
+  appointments: Array<{
+    id: string;
+    leadId: string;
+    title: string;
+    scheduledAt: string;
+    status: 'scheduled' | 'completed' | 'cancelled';
+    notes?: string;
+    createdAt: string;
   }>;
   imports: Array<{
     id: string;
@@ -71,25 +89,77 @@ type ImportResponse = {
   sampleErrors: Array<{ rowIndex: number; error?: string }>;
 };
 
+type UpcomingAppointment = {
+  id: string;
+  leadId: string;
+  title: string;
+  scheduledAt: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  notes?: string;
+  lead: {
+    id: string;
+    idNumber: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    email?: string;
+    city?: string;
+    customerType: CustomerType;
+    status: string;
+  };
+};
+
 const STATUS_LABELS: Record<string, string> = {
   new: 'חדש',
   contacted: 'נוצר קשר',
+  scheduled: 'נקבעה פגישה',
   qualified: 'מתאים',
   customer: 'לקוח',
   lost: 'אבוד',
+};
+
+const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
+  general: 'כל השאר',
+  real_estate: 'נדל"ן',
+};
+
+const OUTCOME_LABELS: Record<CallOutcome, string> = {
+  called: 'בוצעה שיחה',
+  no_answer: 'אין מענה',
+  interested: 'מעוניין/ת',
+  not_interested: 'לא מעוניין/ת',
+  follow_up: 'דרוש פולואפ',
+  appointment_scheduled: 'נקבעה פגישה',
+  wrong_number: 'מספר שגוי',
 };
 
 export default function CrmPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | CustomerType>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<ImportResponse | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const leadsApi = useApi<{ leads: LeadListItem[] }>(
-    `/api/crm/leads?${statusFilter === 'all' ? '' : `status=${statusFilter}`}`,
+  const leadQueryParams = new URLSearchParams();
+  if (statusFilter !== 'all') leadQueryParams.set('status', statusFilter);
+  if (customerTypeFilter !== 'all') leadQueryParams.set('customerType', customerTypeFilter);
+  const leadQuery = leadQueryParams.toString();
+
+  // Keep the backup download in sync with the on-screen filters.
+  const exportQueryParams = new URLSearchParams(leadQueryParams);
+  if (search.trim()) exportQueryParams.set('q', search.trim());
+  const exportQuery = exportQueryParams.toString();
+
+  const appointmentQueryParams = new URLSearchParams();
+  if (customerTypeFilter !== 'all') appointmentQueryParams.set('customerType', customerTypeFilter);
+  const appointmentQuery = appointmentQueryParams.toString();
+
+  const leadsApi = useApi<{ leads: LeadListItem[] }>(`/api/crm/leads${leadQuery ? `?${leadQuery}` : ''}`);
+  const appointmentsApi = useApi<{ appointments: UpcomingAppointment[] }>(
+    `/api/crm/appointments${appointmentQuery ? `?${appointmentQuery}` : ''}`,
   );
   const importsApi = useApi<{ imports: ImportRecord[] }>('/api/crm/import');
   const detailApi = useApi<LeadDetail>(selectedId ? `/api/crm/leads/${selectedId}` : null);
@@ -113,13 +183,19 @@ export default function CrmPage() {
       form.append('file', files[0]);
       const resp = await apiFetch<ImportResponse>('/api/crm/import', { method: 'POST', body: form });
       setUploadResult(resp);
-      await Promise.all([leadsApi.refresh(), importsApi.refresh()]);
+      await Promise.all([leadsApi.refresh(), importsApi.refresh(), appointmentsApi.refresh()]);
     } catch (err) {
       setUploadError((err as Error).message);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const refreshCrm = () => {
+    void detailApi.refresh();
+    void leadsApi.refresh();
+    void appointmentsApi.refresh();
   };
 
   return (
@@ -129,7 +205,7 @@ export default function CrmPage() {
           📇 CRM — תיק לקוחות
         </h1>
         <p style={{ color: '#6b7a9a', fontSize: '15px' }}>
-          העלה קובץ לקוחות (CSV / JSON) — הנתונים מצטברים אוטומטית סביב מספר תעודת הזהות (1-לרבים)
+          העלה קובץ לקוחות, הפרד בין לקוחות נדל&quot;ן לשאר, ותעד שיחות, סטטוסי עניין ופולואפים ביומן הסוכן.
         </p>
       </div>
 
@@ -164,6 +240,13 @@ export default function CrmPage() {
           }}>
             ⬇ הורד תבנית (CSV)
           </a>
+          <a href={`/api/crm/export${exportQuery ? `?${exportQuery}` : ''}`} style={{
+            padding: '6px 14px', borderRadius: '8px', border: '1px solid #cfe0ff',
+            background: '#eef5ff', color: '#2451a0', fontSize: '12px', fontWeight: '700',
+            textDecoration: 'none',
+          }}>
+            💾 הורד גיבוי לקוחות ושיחות (CSV)
+          </a>
           {uploading && <span style={{ color: '#856404' }}>⏳ מייבא...</span>}
         </div>
         {uploadError && (
@@ -182,6 +265,34 @@ export default function CrmPage() {
                 ))}
               </ul>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Follow-up calendar */}
+      <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
+        <h2 style={{ fontSize: '17px', fontWeight: '700', color: '#1e3a6e', marginBottom: '12px' }}>📅 יומן פולואפים קרובים</h2>
+        {appointmentsApi.loading ? (
+          <div style={{ color: '#6b7a9a', fontSize: '14px' }}>טוען פגישות...</div>
+        ) : (appointmentsApi.data?.appointments ?? []).length === 0 ? (
+          <div style={{ color: '#6b7a9a', fontSize: '14px' }}>אין פגישות קרובות בסינון הנוכחי.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px' }}>
+            {(appointmentsApi.data?.appointments ?? []).slice(0, 6).map(a => (
+              <button key={a.id} onClick={() => setSelectedId(a.leadId)} style={{
+                textAlign: 'start', border: '1px solid #dae8f8', background: '#f8f9fc', borderRadius: '12px', padding: '12px', cursor: 'pointer',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                  <strong style={{ color: '#1e3a6e', fontSize: '14px' }}>{a.title}</strong>
+                  <CustomerTypeBadge type={a.lead.customerType} />
+                </div>
+                <div style={{ color: '#3468c4', fontSize: '13px', fontWeight: 700, marginTop: '4px' }}>{formatDateTime(a.scheduledAt)}</div>
+                <div style={{ color: '#6b7a9a', fontSize: '12px', marginTop: '4px' }}>
+                  {[a.lead.firstName, a.lead.lastName].filter(Boolean).join(' ') || a.lead.idNumber}
+                  {a.lead.phone ? ` • ${a.lead.phone}` : ''}
+                </div>
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -218,6 +329,19 @@ export default function CrmPage() {
           placeholder="חפש לפי ת.ז, שם, אימייל או טלפון..."
           style={{ flex: 1, minWidth: '240px', padding: '10px 16px', borderRadius: '10px', border: '1.5px solid #dae8f8', fontSize: '14px', outline: 'none' }} />
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {[
+            ['all', 'הכל'],
+            ['real_estate', CUSTOMER_TYPE_LABELS.real_estate],
+            ['general', CUSTOMER_TYPE_LABELS.general],
+          ].map(([k, label]) => (
+            <button key={k} onClick={() => setCustomerTypeFilter(k as 'all' | CustomerType)} style={{
+              padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+              background: customerTypeFilter === k ? '#3468c4' : '#f0f6ff',
+              color: customerTypeFilter === k ? 'white' : '#1e3a6e',
+            }}>{label}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {[['all', 'הכל'], ...Object.entries(STATUS_LABELS)].map(([k, label]) => (
             <button key={k} onClick={() => setStatusFilter(k)} style={{
               padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
@@ -235,44 +359,46 @@ export default function CrmPage() {
         ) : filtered.length === 0 ? (
           <div style={{ padding: '24px', color: '#6b7a9a' }}>אין לקוחות התואמים לסינון.</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['ת.ז', 'שם', 'דוא"ל', 'טלפון', 'עיר', 'סטטוס', 'פוליסות', 'תקשורת', 'עודכן'].map(h => (
-                  <th key={h} style={{ padding: '12px 14px', background: '#f0f6ff', color: '#1e3a6e', fontWeight: '700', fontSize: '13px', textAlign: 'start' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(l => (
-                <tr key={l.id} onClick={() => setSelectedId(l.id)}
-                  style={{ borderBottom: '1px solid #f0f4f8', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f8f9fc')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'white')}
-                >
-                  <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontWeight: '600' }}>{l.idNumber}</td>
-                  <td style={{ padding: '12px 14px' }}>{[l.firstName, l.lastName].filter(Boolean).join(' ') || '-'}</td>
-                  <td style={{ padding: '12px 14px', fontSize: '13px', color: '#6b7a9a' }}>{l.email ?? '-'}</td>
-                  <td style={{ padding: '12px 14px', fontSize: '13px', color: '#6b7a9a' }}>{l.phone ?? '-'}</td>
-                  <td style={{ padding: '12px 14px', fontSize: '13px', color: '#6b7a9a' }}>{l.city ?? '-'}</td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{
-                      padding: '3px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '700',
-                      background: l.status === 'customer' ? '#e8f5e9' : l.status === 'lost' ? '#fce4ec' : '#fff3cd',
-                      color: l.status === 'customer' ? '#2e7d32' : l.status === 'lost' ? '#c62828' : '#856404',
-                    }}>
-                      {STATUS_LABELS[l.status] ?? l.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 14px', textAlign: 'center' }}>{l.policyCount}</td>
-                  <td style={{ padding: '12px 14px', textAlign: 'center' }}>{l.communicationCount}</td>
-                  <td style={{ padding: '12px 14px', fontSize: '12px', color: '#6b7a9a' }}>
-                    {new Date(l.updatedAt).toLocaleDateString('he-IL')}
-                  </td>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['ת.ז', 'שם', 'סוג', 'דוא"ל', 'טלפון', 'עיר', 'סטטוס', 'אינדיקציה', 'פגישות', 'פולואפ הבא', 'עודכן'].map(h => (
+                    <th key={h} style={{ padding: '12px 14px', background: '#f0f6ff', color: '#1e3a6e', fontWeight: '700', fontSize: '13px', textAlign: 'start' }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map(l => {
+                  const futureFollowUp = l.nextFollowUpAt && new Date(l.nextFollowUpAt).getTime() >= Date.now() ? l.nextFollowUpAt : undefined;
+                  const nextDate = futureFollowUp ?? l.nextAppointment;
+                  return (
+                  <tr key={l.id} onClick={() => setSelectedId(l.id)}
+                    style={{ borderBottom: '1px solid #f0f4f8', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f8f9fc')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'white')}
+                  >
+                    <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontWeight: '600' }}>{l.idNumber}</td>
+                    <td style={{ padding: '12px 14px' }}>{[l.firstName, l.lastName].filter(Boolean).join(' ') || '-'}</td>
+                    <td style={{ padding: '12px 14px' }}><CustomerTypeBadge type={l.customerType} /></td>
+                    <td style={{ padding: '12px 14px', fontSize: '13px', color: '#6b7a9a' }}>{l.email ?? '-'}</td>
+                    <td style={{ padding: '12px 14px', fontSize: '13px', color: '#6b7a9a' }}>{l.phone ?? '-'}</td>
+                    <td style={{ padding: '12px 14px', fontSize: '13px', color: '#6b7a9a' }}>{l.city ?? '-'}</td>
+                    <td style={{ padding: '12px 14px' }}><StatusPill status={l.status} /></td>
+                    <td style={{ padding: '12px 14px', fontSize: '12px', color: '#6b7a9a' }}>{l.lastCallOutcome ? OUTCOME_LABELS[l.lastCallOutcome] : '-'}</td>
+                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>{l.appointmentCount}</td>
+                    <td style={{ padding: '12px 14px', fontSize: '12px', color: nextDate ? '#3468c4' : '#6b7a9a' }}>
+                      {nextDate ? formatDateTime(nextDate) : '-'}
+                    </td>
+                    <td style={{ padding: '12px 14px', fontSize: '12px', color: '#6b7a9a' }}>
+                      {new Date(l.updatedAt).toLocaleDateString('he-IL')}
+                    </td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -280,12 +406,12 @@ export default function CrmPage() {
       {selectedId && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setSelectedId(null)}>
-          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', maxWidth: '760px', width: '94%', maxHeight: '88vh', overflowY: 'auto' }}
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', maxWidth: '820px', width: '94%', maxHeight: '88vh', overflowY: 'auto' }}
             onClick={e => e.stopPropagation()}>
             {detailApi.loading || !detailApi.data ? (
               <div style={{ color: '#6b7a9a', padding: '24px' }}>טוען...</div>
             ) : (
-              <LeadDetailView detail={detailApi.data} onClose={() => setSelectedId(null)} onUpdated={() => { void detailApi.refresh(); void leadsApi.refresh(); }} />
+              <LeadDetailView detail={detailApi.data} onClose={() => setSelectedId(null)} onUpdated={refreshCrm} />
             )}
           </div>
         </div>
@@ -295,8 +421,9 @@ export default function CrmPage() {
 }
 
 function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; onClose: () => void; onUpdated: () => void }) {
-  const { lead, policies, communications, imports } = detail;
+  const { lead, policies, communications, appointments, imports } = detail;
   const [showAddComm, setShowAddComm] = useState(false);
+  const [showAddAppointment, setShowAddAppointment] = useState(false);
   const [showAddPolicy, setShowAddPolicy] = useState(false);
 
   return (
@@ -307,9 +434,11 @@ function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; on
           <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#1e3a6e' }}>
             {[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '(ללא שם)'}
           </h2>
-          <div style={{ fontSize: '13px', color: '#6b7a9a' }}>
-            סטטוס: <strong>{STATUS_LABELS[lead.status] ?? lead.status}</strong>
-            {lead.source && <> • מקור: {lead.source}</>}
+          <div style={{ fontSize: '13px', color: '#6b7a9a', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>סטטוס: <strong>{STATUS_LABELS[lead.status] ?? lead.status}</strong></span>
+            <CustomerTypeBadge type={lead.customerType} />
+            {lead.lastCallOutcome && <span>אינדיקציה אחרונה: <strong>{OUTCOME_LABELS[lead.lastCallOutcome]}</strong></span>}
+            {lead.source && <span>מקור: {lead.source}</span>}
           </div>
         </div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
@@ -322,7 +451,7 @@ function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; on
           { label: 'טלפון נוסף', value: lead.altPhone },
           { label: 'כתובת', value: lead.address },
           { label: 'עיר', value: lead.city },
-          { label: 'תאריך לידה', value: lead.birthDate },
+          { label: 'פולואפ הבא', value: lead.nextFollowUpAt ? formatDateTime(lead.nextFollowUpAt) : undefined },
         ].map(f => (
           <div key={f.label} style={{ padding: '10px', background: '#f0f6ff', borderRadius: '8px' }}>
             <div style={{ fontSize: '11px', color: '#6b7a9a' }}>{f.label}</div>
@@ -334,6 +463,25 @@ function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; on
       {lead.notes && (
         <div style={{ padding: '12px 16px', background: '#fdf6e3', borderRadius: '10px', marginBottom: '16px', fontSize: '13px', color: '#856404' }}>
           📝 {lead.notes}
+        </div>
+      )}
+
+      <SectionHeader title={`📅 פגישות ופולואפים (${appointments.length})`} onAdd={() => setShowAddAppointment(true)} addLabel="קבע פגישה" />
+      {appointments.length === 0 ? (
+        <div style={{ color: '#6b7a9a', fontSize: '13px', marginBottom: '16px' }}>אין פגישות מתוכננות.</div>
+      ) : (
+        <div style={{ marginBottom: '16px' }}>
+          {appointments.map(a => (
+            <div key={a.id} style={{ padding: '10px 14px', background: a.status === 'scheduled' ? '#eef5ff' : '#f8f9fc', borderRadius: '8px', marginBottom: '6px' }}>
+              <div style={{ fontWeight: '700', color: '#1e3a6e', fontSize: '13px' }}>
+                {a.title} • {formatDateTime(a.scheduledAt)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#6b7a9a', marginTop: '3px' }}>
+                סטטוס: {a.status === 'scheduled' ? 'מתוכננת' : a.status === 'completed' ? 'הושלמה' : 'בוטלה'}
+              </div>
+              {a.notes && <div style={{ fontSize: '13px', color: '#52668c', marginTop: '4px', whiteSpace: 'pre-wrap' }}>{a.notes}</div>}
+            </div>
+          ))}
         </div>
       )}
 
@@ -360,7 +508,7 @@ function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; on
         </div>
       )}
 
-      <SectionHeader title={`💬 תקשורת (${communications.length})`} onAdd={() => setShowAddComm(true)} addLabel="רשום תקשורת" />
+      <SectionHeader title={`💬 תקשורת (${communications.length})`} onAdd={() => setShowAddComm(true)} addLabel="רשום שיחה" />
       {communications.length === 0 ? (
         <div style={{ color: '#6b7a9a', fontSize: '13px', marginBottom: '16px' }}>אין רשומות תקשורת.</div>
       ) : (
@@ -369,6 +517,7 @@ function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; on
             <div key={c.id} style={{ padding: '10px 14px', background: '#f8f9fc', borderRadius: '8px', marginBottom: '6px' }}>
               <div style={{ fontWeight: '600', color: '#1e3a6e', fontSize: '13px' }}>
                 {c.channel} • {c.direction === 'inbound' ? 'נכנסת' : 'יוצאת'} • {new Date(c.occurredAt).toLocaleString('he-IL')}
+                {c.outcome ? ` • ${OUTCOME_LABELS[c.outcome]}` : ''}
               </div>
               <div style={{ fontSize: '13px', color: '#6b7a9a', marginTop: '4px' }}>{c.summary}</div>
             </div>
@@ -398,6 +547,9 @@ function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; on
         </details>
       )}
 
+      {showAddAppointment && (
+        <AddAppointment lead={lead} onClose={() => setShowAddAppointment(false)} onSaved={() => { setShowAddAppointment(false); onUpdated(); }} />
+      )}
       {showAddComm && (
         <AddCommunication leadId={lead.id} onClose={() => setShowAddComm(false)} onSaved={() => { setShowAddComm(false); onUpdated(); }} />
       )}
@@ -405,6 +557,36 @@ function LeadDetailView({ detail, onClose, onUpdated }: { detail: LeadDetail; on
         <AddPolicy leadId={lead.id} onClose={() => setShowAddPolicy(false)} onSaved={() => { setShowAddPolicy(false); onUpdated(); }} />
       )}
     </>
+  );
+}
+
+function CustomerTypeBadge({ type }: { type: CustomerType }) {
+  const isRealEstate = type === 'real_estate';
+  return (
+    <span style={{
+      padding: '3px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '700',
+      background: isRealEstate ? '#eef5ff' : '#f3f4f6',
+      color: isRealEstate ? '#2451a0' : '#52668c',
+      border: `1px solid ${isRealEstate ? '#cfe0ff' : '#e1e7ef'}`,
+      whiteSpace: 'nowrap',
+    }}>
+      {isRealEstate ? '🏘️ ' : '📁 '}{CUSTOMER_TYPE_LABELS[type]}
+    </span>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const palette = status === 'customer'
+    ? { bg: '#e8f5e9', fg: '#2e7d32' }
+    : status === 'lost'
+      ? { bg: '#fce4ec', fg: '#c62828' }
+      : status === 'scheduled'
+        ? { bg: '#e3f2fd', fg: '#1565c0' }
+        : { bg: '#fff3cd', fg: '#856404' };
+  return (
+    <span style={{ padding: '3px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: palette.bg, color: palette.fg }}>
+      {STATUS_LABELS[status] ?? status}
+    </span>
   );
 }
 
@@ -423,6 +605,7 @@ function SectionHeader({ title, onAdd, addLabel }: { title: string; onAdd: () =>
 function AddCommunication({ leadId, onClose, onSaved }: { leadId: string; onClose: () => void; onSaved: () => void }) {
   const [channel, setChannel] = useState('phone');
   const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
+  const [outcome, setOutcome] = useState<'' | CallOutcome>('');
   const [summary, setSummary] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -433,7 +616,7 @@ function AddCommunication({ leadId, onClose, onSaved }: { leadId: string; onClos
       await apiFetch(`/api/crm/leads/${leadId}/communications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel, direction, summary }),
+        body: JSON.stringify({ channel, direction, outcome: outcome || undefined, summary }),
       });
       onSaved();
     } catch (err) {
@@ -444,7 +627,7 @@ function AddCommunication({ leadId, onClose, onSaved }: { leadId: string; onClos
   };
 
   return (
-    <Overlay onClose={onClose} title="רשום תקשורת">
+    <Overlay onClose={onClose} title="רשום שיחה / אינדיקציה">
       {error && <div style={{ color: '#c62828', marginBottom: '8px' }}>⚠️ {error}</div>}
       <Field label="ערוץ">
         <select value={channel} onChange={e => setChannel(e.target.value)} style={inputStyle}>
@@ -462,10 +645,56 @@ function AddCommunication({ leadId, onClose, onSaved }: { leadId: string; onClos
           <option value="inbound">נכנסת</option>
         </select>
       </Field>
+      <Field label="אינדיקציית שיחה">
+        <select value={outcome} onChange={e => setOutcome(e.target.value as '' | CallOutcome)} style={inputStyle}>
+          <option value="">ללא</option>
+          {Object.entries(OUTCOME_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+      </Field>
       <Field label="סיכום">
         <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={3} style={{ ...inputStyle, fontFamily: 'inherit' }} />
       </Field>
       <FormButtons onCancel={onClose} onSubmit={() => void submit()} disabled={busy || !summary.trim()} submitLabel={busy ? 'שומר...' : 'שמור'} />
+    </Overlay>
+  );
+}
+
+function AddAppointment({ lead, onClose, onSaved }: { lead: LeadDetail['lead']; onClose: () => void; onSaved: () => void }) {
+  const customerName = [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.idNumber;
+  const [title, setTitle] = useState(`שיחת פולואפ עם ${customerName}`);
+  const [scheduledAt, setScheduledAt] = useState(toLocalDateTimeValue(new Date(Date.now() + 60 * 60 * 1000)));
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      await apiFetch(`/api/crm/leads/${lead.id}/appointments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, scheduledAt: new Date(scheduledAt).toISOString(), notes: notes || undefined }),
+      });
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Overlay onClose={onClose} title="קבע פגישה / פולואפ">
+      {error && <div style={{ color: '#c62828', marginBottom: '8px' }}>⚠️ {error}</div>}
+      <div style={{ padding: '10px 12px', background: '#f0f6ff', borderRadius: '10px', marginBottom: '10px', fontSize: '12px', color: '#52668c' }}>
+        פרטי הלקוח יישמרו אוטומטית בפגישה: {lead.idNumber}{lead.phone ? ` • ${lead.phone}` : ''}{lead.email ? ` • ${lead.email}` : ''}
+      </div>
+      <Field label="כותרת"><input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} /></Field>
+      <Field label="תאריך ושעה"><input type="datetime-local" value={scheduledAt} min={toLocalDateTimeValue(new Date())} onChange={e => setScheduledAt(e.target.value)} style={inputStyle} /></Field>
+      <Field label="הערות לפולואפ"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} style={{ ...inputStyle, fontFamily: 'inherit' }} /></Field>
+      <FormButtons onCancel={onClose} onSubmit={() => void submit()} disabled={busy || !scheduledAt || !title.trim()} submitLabel={busy ? 'שומר...' : 'קבע'} />
     </Overlay>
   );
 }
@@ -529,7 +758,7 @@ function FormButtons({ onCancel, onSubmit, disabled, submitLabel }: { onCancel: 
   return (
     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
       <button onClick={onCancel} style={{ padding: '8px 16px', borderRadius: '8px', border: '1.5px solid #dae8f8', background: 'white', color: '#6b7a9a', fontWeight: '600', cursor: 'pointer' }}>ביטול</button>
-      <button onClick={onSubmit} disabled={disabled} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', fontWeight: '700', cursor: 'pointer', opacity: disabled ? 0.6 : 1 }}>{submitLabel}</button>
+      <button onClick={onSubmit} disabled={disabled} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #1e3a6e, #2451a0)', color: 'white', fontWeight: '700', cursor: disabled ? 'wait' : 'pointer', opacity: disabled ? 0.6 : 1 }}>{submitLabel}</button>
     </div>
   );
 }
@@ -537,10 +766,20 @@ function FormButtons({ onCancel, onSubmit, disabled, submitLabel }: { onCancel: 
 function Overlay({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: 'white', borderRadius: '14px', padding: '20px', maxWidth: '420px', width: '90%' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'white', borderRadius: '14px', padding: '20px', maxWidth: '460px', width: '90%' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: '17px', fontWeight: '800', color: '#1e3a6e', marginBottom: '12px' }}>{title}</h3>
         {children}
       </div>
     </div>
   );
+}
+
+function formatDateTime(value: string | undefined): string {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function toLocalDateTimeValue(date: Date): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
