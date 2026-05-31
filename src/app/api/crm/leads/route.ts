@@ -5,6 +5,7 @@ import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { serializeLead } from "@/lib/crm/serializers";
 import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
+import { safeJSON } from "@/lib/json";
 import { leadScopeFilter } from "@/lib/crm/access";
 import { CUSTOMER_TYPES, LEAD_STATUSES, customerTypeFromSource } from "@/lib/crm/workflow";
 
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
     const status = url.searchParams.get("status");
     const customerType = url.searchParams.get("customerType");
     const where: Record<string, unknown> = { ...leadScopeFilter(me) };
+    const upcomingCutoff = new Date(Date.now() - 60 * 60 * 1000);
     if (status) {
       if (!isLeadStatus(status)) return err(400, "Invalid lead status");
       where.status = status;
@@ -40,7 +42,7 @@ export async function GET(req: Request) {
       include: {
         _count: { select: { policies: true, communications: true, appointments: true } },
         appointments: {
-          where: { status: "scheduled" },
+          where: { status: "scheduled", scheduledAt: { gte: upcomingCutoff } },
           orderBy: { scheduledAt: "asc" },
           take: 1,
         },
@@ -98,7 +100,8 @@ export async function POST(req: Request) {
       return err(403, "Lead belongs to another tenant");
     }
 
-    const customerType = body.customerType ?? (body.source ? customerTypeFromSource(body.source) : undefined);
+    const inferredCustomerType = body.source ? customerTypeFromSource(body.source) : undefined;
+    const customerType = body.customerType ?? inferredCustomerType;
 
     let lead;
     if (existing) {
@@ -115,10 +118,10 @@ export async function POST(req: Request) {
           birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
           gender: body.gender ?? undefined,
           source: body.source ?? undefined,
-          customerType,
+          customerType: body.customerType ?? (customerType === "real_estate" ? "real_estate" : undefined),
           status: body.status ?? undefined,
           notes: body.notes ?? undefined,
-          ...(body.metadata && { metadata: JSON.stringify(body.metadata) }),
+          ...(body.metadata && { metadata: JSON.stringify({ ...safeJSON<Record<string, unknown>>(existing.metadata, {}), ...body.metadata }) }),
         },
       });
     } else {

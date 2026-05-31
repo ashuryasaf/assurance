@@ -5,6 +5,7 @@ import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { serializeLead, serializeLeadPolicy, serializeLeadComm, serializeLeadAppointment } from "@/lib/crm/serializers";
 import { canSeeLead, loadLead } from "@/lib/crm/access";
 import { CUSTOMER_TYPES, LEAD_STATUSES, parseRequiredDate } from "@/lib/crm/workflow";
+import { safeJSON } from "@/lib/json";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -90,7 +91,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ...(body.customerType !== undefined && { customerType: body.customerType }),
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
-        ...(body.metadata !== undefined && { metadata: JSON.stringify(body.metadata) }),
+        ...(body.metadata !== undefined && { metadata: JSON.stringify({ ...safeJSON<Record<string, unknown>>(lead.metadata, {}), ...body.metadata }) }),
       },
     });
     return ok({ lead: serializeLead(updated) });

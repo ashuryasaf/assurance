@@ -42,7 +42,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const body = await parseJSON(req, schema);
     const scheduledAt = parseRequiredDate(body.scheduledAt);
     if (!scheduledAt) return err(400, "Invalid appointment date");
-    if (scheduledAt.getTime() < Date.now() - 60_000) return err(400, "Appointment must be in the future");
+    const now = new Date();
+    if (scheduledAt.getTime() < now.getTime() - 60_000) return err(400, "Appointment must be in the future");
 
     const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.idNumber;
     const title = body.title?.trim() || `Follow-up call with ${name}`;
@@ -63,7 +64,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       });
 
       const next = await tx.leadAppointment.findFirst({
-        where: { leadId: lead.id, status: "scheduled" },
+        where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: now } },
         orderBy: { scheduledAt: "asc" },
       });
 

@@ -659,7 +659,7 @@ function AddAppointment({ lead, onClose, onSaved }: { lead: LeadDetail['lead']; 
       await apiFetch(`/api/crm/leads/${lead.id}/appointments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, scheduledAt, notes: notes || undefined }),
+        body: JSON.stringify({ title, scheduledAt: new Date(scheduledAt).toISOString(), notes: notes || undefined }),
       });
       onSaved();
     } catch (err) {

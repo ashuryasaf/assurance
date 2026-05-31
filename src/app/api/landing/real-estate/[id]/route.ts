@@ -13,6 +13,23 @@ const patchSchema = z.object({
   notes: z.string().max(2000).optional(),
 });
 
+
+async function canAssignLandingLead(me: { role: string; id: string; agencyId?: string }, assignedAgentId: string | null | undefined) {
+  if (assignedAgentId === undefined || assignedAgentId === null) return true;
+  if (me.role !== "super_admin" && me.role !== "admin" && me.role !== "agency_owner" && assignedAgentId !== me.id) {
+    return false;
+  }
+
+  const assignee = await prisma.user.findUnique({
+    where: { id: assignedAgentId },
+    select: { role: true, agencyId: true, isActive: true },
+  });
+  if (!assignee?.isActive || !["agent", "sub_agent", "agency_owner"].includes(assignee.role)) return false;
+  if (me.role === "super_admin" || me.role === "admin") return true;
+  if (!me.agencyId) return assignedAgentId === me.id;
+  return assignee.agencyId === me.agencyId;
+}
+
 async function canAccessLandingLead(me: { role: string; id: string; agencyId?: string }, lead: { assignedAgentId: string | null }) {
   if (me.role === "super_admin" || me.role === "admin") return true;
   if (!lead.assignedAgentId) return true;
@@ -43,6 +60,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
 
     const body = await parseJSON(req, patchSchema);
+    if (!(await canAssignLandingLead(me, body.assignedAgentId))) {
+      return err(403, "Cannot assign lead to that agent");
+    }
+
     const updated = await prisma.realEstateLead.update({
       where: { id },
       data: {

@@ -4,6 +4,7 @@ import { handleError, ok, err } from "@/lib/api";
 import { parseCustomerFile, type ParsedRow } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
 import { customerTypeFromSource } from "@/lib/crm/workflow";
+import { safeJSON } from "@/lib/json";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_ROWS = 5000;
@@ -95,117 +96,120 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const idNumber = row.lead.idNumber;
-      const existing = await prisma.lead.findUnique({ where: { idNumber } });
-
-      if (existing && !canModifyLead(me, existing)) {
-        errorCount++;
-        await prisma.leadImportRow.create({
-          data: {
-            importId: job.id,
-            rowIndex: row.rowIndex,
-            status: "error",
-            raw: JSON.stringify(row.raw),
-            error: "Lead belongs to another tenant",
-            idNumber,
-          },
-        });
-        continue;
-      }
-
+      const leadRow = row.lead;
+      const idNumber = leadRow.idNumber;
+      const source = leadRow.source ?? job.fileName;
+      const inferredCustomerType = customerTypeFromSource(source);
       const baseData = {
-        firstName: row.lead.firstName,
-        lastName: row.lead.lastName,
-        email: row.lead.email,
-        phone: row.lead.phone,
-        altPhone: row.lead.altPhone,
-        address: row.lead.address,
-        city: row.lead.city,
-        birthDate: row.lead.birthDate ? new Date(row.lead.birthDate) : null,
-        gender: row.lead.gender,
-        source: row.lead.source ?? job.fileName,
-        customerType: customerTypeFromSource(row.lead.source ?? job.fileName),
-        status: row.lead.status,
-        notes: row.lead.notes,
+        firstName: leadRow.firstName,
+        lastName: leadRow.lastName,
+        email: leadRow.email,
+        phone: leadRow.phone,
+        altPhone: leadRow.altPhone,
+        address: leadRow.address,
+        city: leadRow.city,
+        birthDate: leadRow.birthDate ? new Date(leadRow.birthDate) : null,
+        gender: leadRow.gender,
+        source,
+        status: leadRow.status,
+        notes: leadRow.notes,
       };
 
-      let leadId: string;
-      let rowStatus: "created" | "updated";
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.lead.findUnique({ where: { idNumber } });
 
-      if (existing) {
-        let merged: Record<string, unknown> = {};
-        try {
-          merged = JSON.parse(existing.metadata) as Record<string, unknown>;
-        } catch {
-          merged = {};
+        if (existing && !canModifyLead(me, existing)) {
+          await tx.leadImportRow.create({
+            data: {
+              importId: job.id,
+              rowIndex: row.rowIndex,
+              status: "error",
+              raw: JSON.stringify(row.raw),
+              error: "Lead belongs to another tenant",
+              idNumber,
+            },
+          });
+          return { rowStatus: "error" as const };
         }
-        merged = { ...merged, ...row.metadata };
-        const updated = await prisma.lead.update({
-          where: { id: existing.id },
-          data: {
-            ...stripUndefined(baseData),
-            metadata: JSON.stringify(merged),
-            agentId: existing.agentId ?? me.id,
-            agencyId: existing.agencyId ?? me.agencyId,
-          },
-        });
-        leadId = updated.id;
-        rowStatus = "updated";
-        updatedCount++;
-      } else {
-        const created = await prisma.lead.create({
-          data: {
-            idNumber,
-            ...stripUndefined(baseData),
-            status: row.lead.status ?? "new",
-            metadata: JSON.stringify(row.metadata ?? {}),
-            agentId: me.id,
-            agencyId: me.agencyId,
-          },
-        });
-        leadId = created.id;
-        rowStatus = "created";
-        createdCount++;
-      }
 
-      // Optional 1:N data attached to the same id.
-      if (row.policy) {
-        await prisma.leadPolicy.create({
+        let leadId: string;
+        let rowStatus: "created" | "updated";
+
+        if (existing) {
+          const merged = { ...safeJSON<Record<string, unknown>>(existing.metadata, {}), ...row.metadata };
+          const updated = await tx.lead.update({
+            where: { id: existing.id },
+            data: {
+              ...stripUndefined(baseData),
+              customerType: inferredCustomerType === "real_estate" ? "real_estate" : existing.customerType,
+              metadata: JSON.stringify(merged),
+              agentId: existing.agentId ?? me.id,
+              agencyId: existing.agencyId ?? me.agencyId,
+            },
+          });
+          leadId = updated.id;
+          rowStatus = "updated";
+        } else {
+          const created = await tx.lead.create({
+            data: {
+              idNumber,
+              ...stripUndefined(baseData),
+              customerType: inferredCustomerType,
+              status: leadRow.status ?? "new",
+              metadata: JSON.stringify(row.metadata ?? {}),
+              agentId: me.id,
+              agencyId: me.agencyId,
+            },
+          });
+          leadId = created.id;
+          rowStatus = "created";
+        }
+
+        // Optional 1:N data attached to the same id.
+        if (row.policy) {
+          await tx.leadPolicy.create({
+            data: {
+              leadId,
+              policyNumber: row.policy.policyNumber,
+              type: row.policy.type,
+              provider: row.policy.provider,
+              status: row.policy.status,
+              premium: row.policy.premium ?? null,
+              startDate: row.policy.startDate ? new Date(row.policy.startDate) : null,
+              endDate: row.policy.endDate ? new Date(row.policy.endDate) : null,
+              raw: JSON.stringify(row.raw),
+            },
+          });
+        }
+        if (row.communication) {
+          await tx.leadCommunication.create({
+            data: {
+              leadId,
+              channel: row.communication.channel,
+              direction: row.communication.direction ?? "outbound",
+              summary: row.communication.summary,
+              occurredAt: row.communication.occurredAt ? new Date(row.communication.occurredAt) : new Date(),
+            },
+          });
+        }
+
+        await tx.leadImportRow.create({
           data: {
+            importId: job.id,
             leadId,
-            policyNumber: row.policy.policyNumber,
-            type: row.policy.type,
-            provider: row.policy.provider,
-            status: row.policy.status,
-            premium: row.policy.premium ?? null,
-            startDate: row.policy.startDate ? new Date(row.policy.startDate) : null,
-            endDate: row.policy.endDate ? new Date(row.policy.endDate) : null,
+            idNumber,
+            rowIndex: row.rowIndex,
+            status: rowStatus,
             raw: JSON.stringify(row.raw),
           },
         });
-      }
-      if (row.communication) {
-        await prisma.leadCommunication.create({
-          data: {
-            leadId,
-            channel: row.communication.channel,
-            direction: row.communication.direction ?? "outbound",
-            summary: row.communication.summary,
-            occurredAt: row.communication.occurredAt ? new Date(row.communication.occurredAt) : new Date(),
-          },
-        });
-      }
 
-      await prisma.leadImportRow.create({
-        data: {
-          importId: job.id,
-          leadId,
-          idNumber,
-          rowIndex: row.rowIndex,
-          status: rowStatus,
-          raw: JSON.stringify(row.raw),
-        },
+        return { rowStatus };
       });
+
+      if (result.rowStatus === "created") createdCount++;
+      else if (result.rowStatus === "updated") updatedCount++;
+      else errorCount++;
     }
 
     const finalised = await prisma.customerImport.update({
