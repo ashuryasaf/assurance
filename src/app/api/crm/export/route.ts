@@ -125,7 +125,7 @@ function rowFor(lead: ExportLead): string[] {
   const latestPolicy = lead.policies[0];
   const nextAppointment = lead.appointments.find((appointment) => appointment.status === "scheduled") ?? lead.appointments[0];
   const communicationDate = joinValues(lead.communications.map((communication) => toIso(communication.occurredAt)));
-  const communicationOutcome = joinValues(lead.communications.map((communication) => communication.outcome ?? ""));
+  const communicationOutcome = lead.communications.map((communication) => communication.outcome ?? "").join(" | ");
   const communicationSummary = joinValues(
     lead.communications.map((communication) => {
       const date = toIso(communication.occurredAt);
