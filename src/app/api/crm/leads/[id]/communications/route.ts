@@ -39,11 +39,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       if (body.outcome) {
         const derivedStatus = statusForCallOutcome(body.outcome);
+        // Appointments are the source of truth for scheduling: a call outcome
+        // must not set "scheduled" on its own, nor demote a lead that still has
+        // an upcoming scheduled appointment.
+        const hasUpcomingAppointment =
+          lead.status === "scheduled"
+            ? await tx.leadAppointment.findFirst({
+                where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date() } },
+                select: { id: true },
+              })
+            : null;
+        const nextStatus =
+          derivedStatus &&
+          derivedStatus !== "scheduled" &&
+          lead.status !== "customer" &&
+          !hasUpcomingAppointment
+            ? derivedStatus
+            : undefined;
         await tx.lead.update({
           where: { id: lead.id },
           data: {
             lastCallOutcome: body.outcome,
-            ...(derivedStatus && lead.status !== "customer" && { status: derivedStatus }),
+            ...(nextStatus && { status: nextStatus }),
           },
         });
       }

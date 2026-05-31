@@ -64,7 +64,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       });
 
       const next = await tx.leadAppointment.findFirst({
-        where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: now } },
+        where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date(now.getTime() - 60_000) } },
         orderBy: { scheduledAt: "asc" },
       });
 

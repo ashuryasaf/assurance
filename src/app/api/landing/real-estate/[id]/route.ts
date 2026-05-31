@@ -162,7 +162,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           email: lead.email ?? undefined,
           notes: lead.notes ?? undefined,
           source: lead.source ?? `${lead.campaignType}-landing`,
-          customerType,
+          ...(customerType === "real_estate" && { customerType: "real_estate" }),
           metadata,
         },
       });

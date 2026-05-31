@@ -357,7 +357,10 @@ export default function CrmPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(l => (
+                {filtered.map(l => {
+                  const futureFollowUp = l.nextFollowUpAt && new Date(l.nextFollowUpAt).getTime() >= Date.now() ? l.nextFollowUpAt : undefined;
+                  const nextDate = futureFollowUp ?? l.nextAppointment;
+                  return (
                   <tr key={l.id} onClick={() => setSelectedId(l.id)}
                     style={{ borderBottom: '1px solid #f0f4f8', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#f8f9fc')}
@@ -372,14 +375,15 @@ export default function CrmPage() {
                     <td style={{ padding: '12px 14px' }}><StatusPill status={l.status} /></td>
                     <td style={{ padding: '12px 14px', fontSize: '12px', color: '#6b7a9a' }}>{l.lastCallOutcome ? OUTCOME_LABELS[l.lastCallOutcome] : '-'}</td>
                     <td style={{ padding: '12px 14px', textAlign: 'center' }}>{l.appointmentCount}</td>
-                    <td style={{ padding: '12px 14px', fontSize: '12px', color: l.nextFollowUpAt || l.nextAppointment ? '#3468c4' : '#6b7a9a' }}>
-                      {l.nextFollowUpAt || l.nextAppointment ? formatDateTime(l.nextFollowUpAt ?? l.nextAppointment) : '-'}
+                    <td style={{ padding: '12px 14px', fontSize: '12px', color: nextDate ? '#3468c4' : '#6b7a9a' }}>
+                      {nextDate ? formatDateTime(nextDate) : '-'}
                     </td>
                     <td style={{ padding: '12px 14px', fontSize: '12px', color: '#6b7a9a' }}>
                       {new Date(l.updatedAt).toLocaleDateString('he-IL')}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -589,7 +593,7 @@ function SectionHeader({ title, onAdd, addLabel }: { title: string; onAdd: () =>
 function AddCommunication({ leadId, onClose, onSaved }: { leadId: string; onClose: () => void; onSaved: () => void }) {
   const [channel, setChannel] = useState('phone');
   const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
-  const [outcome, setOutcome] = useState<'' | CallOutcome>('called');
+  const [outcome, setOutcome] = useState<'' | CallOutcome>('');
   const [summary, setSummary] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

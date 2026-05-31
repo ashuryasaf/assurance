@@ -4,7 +4,7 @@ import type { CurrentUser } from "@/lib/dal";
 export function canModifyLead(me: CurrentUser, lead: { agencyId: string | null; agentId: string | null }): boolean {
   if (me.role === "super_admin" || me.role === "admin") return true;
   if (lead.agentId === me.id) return true;
-  if (me.role === "agency_owner" && me.agencyId && lead.agencyId === me.agencyId) return true;
+  if (me.agencyId && lead.agencyId === me.agencyId) return true;
   return false;
 }
 

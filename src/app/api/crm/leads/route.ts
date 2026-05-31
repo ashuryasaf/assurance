@@ -7,7 +7,7 @@ import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
 import { safeJSON } from "@/lib/json";
 import { leadScopeFilter } from "@/lib/crm/access";
-import { CUSTOMER_TYPES, LEAD_STATUSES, customerTypeFromSource } from "@/lib/crm/workflow";
+import { CUSTOMER_TYPES, LEAD_STATUSES, customerTypeFromSource, parseRequiredDate } from "@/lib/crm/workflow";
 
 function isLeadStatus(value: string): value is (typeof LEAD_STATUSES)[number] {
   return (LEAD_STATUSES as readonly string[]).includes(value);
@@ -100,6 +100,9 @@ export async function POST(req: Request) {
       return err(403, "Lead belongs to another tenant");
     }
 
+    const birthDate = body.birthDate ? parseRequiredDate(body.birthDate) : null;
+    if (body.birthDate && !birthDate) return err(400, "Invalid birth date");
+
     const inferredCustomerType = body.source ? customerTypeFromSource(body.source) : undefined;
     const customerType = body.customerType ?? inferredCustomerType;
 
@@ -115,7 +118,7 @@ export async function POST(req: Request) {
           altPhone: body.altPhone ?? undefined,
           address: body.address ?? undefined,
           city: body.city ?? undefined,
-          birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
+          birthDate: birthDate ?? undefined,
           gender: body.gender ?? undefined,
           source: body.source ?? undefined,
           customerType: body.customerType ?? (customerType === "real_estate" ? "real_estate" : undefined),
@@ -135,7 +138,7 @@ export async function POST(req: Request) {
           altPhone: body.altPhone,
           address: body.address,
           city: body.city,
-          birthDate: body.birthDate ? new Date(body.birthDate) : null,
+          birthDate,
           gender: body.gender,
           source: body.source,
           customerType: customerType ?? "general",

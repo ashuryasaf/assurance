@@ -75,6 +75,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const birthDate = body.birthDate !== undefined && body.birthDate ? parseRequiredDate(body.birthDate) : null;
     if (body.birthDate && !birthDate) return err(400, "Invalid birth date");
 
+    // Keep nextFollowUpAt in sync with actual upcoming appointments whenever the
+    // pipeline status changes, so stale/past follow-up timestamps don't linger.
+    let nextFollowUpAt: Date | null | undefined;
+    if (body.status !== undefined) {
+      const upcoming = await prisma.leadAppointment.findFirst({
+        where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date() } },
+        orderBy: { scheduledAt: "asc" },
+      });
+      nextFollowUpAt = upcoming?.scheduledAt ?? null;
+    }
+
     const updated = await prisma.lead.update({
       where: { id: lead.id },
       data: {
@@ -90,6 +101,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ...(body.source !== undefined && { source: body.source }),
         ...(body.customerType !== undefined && { customerType: body.customerType }),
         ...(body.status !== undefined && { status: body.status }),
+        ...(nextFollowUpAt !== undefined && { nextFollowUpAt }),
         ...(body.notes !== undefined && { notes: body.notes }),
         ...(body.metadata !== undefined && { metadata: JSON.stringify({ ...safeJSON<Record<string, unknown>>(lead.metadata, {}), ...body.metadata }) }),
       },
