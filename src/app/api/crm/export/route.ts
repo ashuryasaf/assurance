@@ -93,57 +93,86 @@ export async function GET(req: Request) {
 
     const rows = [HEADERS];
     for (const lead of filtered) {
-      const maxRows = Math.max(
-        lead.communications.length,
-        lead.appointments.length,
-        lead.policies.length,
-        lead.importRows.length,
-        1,
-      );
+      const leadCols = [
+        lead.id,
+        lead.idNumber,
+        lead.firstName ?? "",
+        lead.lastName ?? "",
+        [lead.firstName, lead.lastName].filter(Boolean).join(" "),
+        lead.customerType,
+        lead.status,
+        lead.lastCallOutcome ?? "",
+        toIso(lead.nextFollowUpAt),
+        lead.phone ?? "",
+        lead.altPhone ?? "",
+        lead.email ?? "",
+        lead.city ?? "",
+        lead.address ?? "",
+        lead.source ?? "",
+        lead.notes ?? "",
+      ];
+      const tailCols = [lead.createdAt.toISOString(), lead.updatedAt.toISOString()];
+      const blankComm = ["", "", "", "", ""];
+      const blankAppointment = ["", "", "", ""];
+      const blankPolicy = ["", "", "", "", ""];
+      const blankImport = ["", "", "", ""];
 
-      for (let index = 0; index < maxRows; index++) {
-        const communication = lead.communications[index];
-        const appointment = lead.appointments[index];
-        const policy = lead.policies[index];
-        const importRow = lead.importRows[index];
-        rows.push([
-          lead.id,
-          lead.idNumber,
-          lead.firstName ?? "",
-          lead.lastName ?? "",
-          [lead.firstName, lead.lastName].filter(Boolean).join(" "),
-          lead.customerType,
-          lead.status,
-          lead.lastCallOutcome ?? "",
-          toIso(lead.nextFollowUpAt),
-          lead.phone ?? "",
-          lead.altPhone ?? "",
-          lead.email ?? "",
-          lead.city ?? "",
-          lead.address ?? "",
-          lead.source ?? "",
-          lead.notes ?? "",
-          toIso(communication?.occurredAt),
-          communication?.channel ?? "",
-          communication?.direction ?? "",
-          communication?.outcome ?? "",
-          communication?.summary ?? "",
-          toIso(appointment?.scheduledAt),
-          appointment?.status ?? "",
-          appointment?.title ?? "",
-          appointment?.notes ?? "",
-          policy?.policyNumber ?? "",
-          policy?.type ?? "",
-          policy?.provider ?? "",
-          policy?.status ?? "",
-          policy?.premium?.toString() ?? "",
-          importRow?.import.fileName ?? "",
-          importRow ? String(importRow.rowIndex + 1) : "",
-          importRow?.status ?? "",
-          toIso(importRow?.import.createdAt),
-          lead.createdAt.toISOString(),
-          lead.updatedAt.toISOString(),
+      // Each related record gets its own row so unrelated communications,
+      // appointments, policies, and import rows are never zipped together.
+      const pushRow = (comm: string[], appointment: string[], policy: string[], importRow: string[]) =>
+        rows.push([...leadCols, ...comm, ...appointment, ...policy, ...importRow, ...tailCols]);
+
+      for (const communication of lead.communications) {
+        pushRow(
+          [
+            toIso(communication.occurredAt),
+            communication.channel ?? "",
+            communication.direction ?? "",
+            communication.outcome ?? "",
+            communication.summary ?? "",
+          ],
+          blankAppointment,
+          blankPolicy,
+          blankImport,
+        );
+      }
+      for (const appointment of lead.appointments) {
+        pushRow(
+          blankComm,
+          [toIso(appointment.scheduledAt), appointment.status ?? "", appointment.title ?? "", appointment.notes ?? ""],
+          blankPolicy,
+          blankImport,
+        );
+      }
+      for (const policy of lead.policies) {
+        pushRow(
+          blankComm,
+          blankAppointment,
+          [
+            policy.policyNumber ?? "",
+            policy.type ?? "",
+            policy.provider ?? "",
+            policy.status ?? "",
+            policy.premium?.toString() ?? "",
+          ],
+          blankImport,
+        );
+      }
+      for (const importRow of lead.importRows) {
+        pushRow(blankComm, blankAppointment, blankPolicy, [
+          importRow.import.fileName ?? "",
+          String(importRow.rowIndex + 1),
+          importRow.status ?? "",
+          toIso(importRow.import.createdAt),
         ]);
+      }
+      if (
+        lead.communications.length === 0 &&
+        lead.appointments.length === 0 &&
+        lead.policies.length === 0 &&
+        lead.importRows.length === 0
+      ) {
+        pushRow(blankComm, blankAppointment, blankPolicy, blankImport);
       }
     }
 

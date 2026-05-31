@@ -100,6 +100,9 @@ export async function POST(req: Request) {
       const idNumber = leadRow.idNumber;
       const source = leadRow.source ?? job.fileName;
       const inferredCustomerType = customerTypeFromSource(source);
+      // Imports never create appointments, so they can't establish the
+      // "scheduled" status, which is owned by the appointment flow.
+      const importedStatus = leadRow.status === "scheduled" ? undefined : leadRow.status;
       const baseData = {
         firstName: leadRow.firstName,
         lastName: leadRow.lastName,
@@ -111,7 +114,7 @@ export async function POST(req: Request) {
         birthDate: leadRow.birthDate ? new Date(leadRow.birthDate) : null,
         gender: leadRow.gender,
         source,
-        status: leadRow.status,
+        status: importedStatus,
         notes: leadRow.notes,
       };
 
@@ -157,7 +160,7 @@ export async function POST(req: Request) {
                 idNumber,
                 ...stripUndefined(baseData),
                 customerType: inferredCustomerType,
-                status: leadRow.status ?? "new",
+                status: importedStatus ?? "new",
                 metadata: JSON.stringify(row.metadata ?? {}),
                 agentId: me.id,
                 agencyId: me.agencyId,

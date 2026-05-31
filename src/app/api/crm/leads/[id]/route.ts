@@ -83,7 +83,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date() } },
         orderBy: { scheduledAt: "asc" },
       });
-      nextFollowUpAt = upcoming?.scheduledAt ?? null;
+      // Appointments are the source of truth for scheduling: a lead can't be
+      // marked "scheduled" without an upcoming appointment.
+      if (body.status === "scheduled" && !upcoming) {
+        return err(400, "Cannot mark a lead as scheduled without an upcoming appointment");
+      }
+      // A lost lead is terminal and must not retain a future follow-up.
+      nextFollowUpAt = body.status === "lost" ? null : upcoming?.scheduledAt ?? null;
     }
 
     const updated = await prisma.lead.update({

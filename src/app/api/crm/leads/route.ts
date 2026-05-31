@@ -103,6 +103,18 @@ export async function POST(req: Request) {
     const birthDate = body.birthDate ? parseRequiredDate(body.birthDate) : null;
     if (body.birthDate && !birthDate) return err(400, "Invalid birth date");
 
+    // Appointments are the source of truth for scheduling: a lead can't be
+    // marked "scheduled" without an upcoming appointment.
+    if (body.status === "scheduled") {
+      const upcoming = existing
+        ? await prisma.leadAppointment.findFirst({
+            where: { leadId: existing.id, status: "scheduled", scheduledAt: { gte: new Date() } },
+            select: { id: true },
+          })
+        : null;
+      if (!upcoming) return err(400, "Cannot mark a lead as scheduled without an upcoming appointment");
+    }
+
     const inferredCustomerType = body.source ? customerTypeFromSource(body.source) : undefined;
     const customerType = body.customerType ?? inferredCustomerType;
 

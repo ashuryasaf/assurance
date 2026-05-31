@@ -41,14 +41,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         const derivedStatus = statusForCallOutcome(body.outcome);
         // Appointments are the source of truth for scheduling: a call outcome
         // must not set "scheduled" on its own, nor demote a lead that still has
-        // an upcoming scheduled appointment.
-        const hasUpcomingAppointment =
-          lead.status === "scheduled"
-            ? await tx.leadAppointment.findFirst({
-                where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date() } },
-                select: { id: true },
-              })
-            : null;
+        // an upcoming scheduled appointment. Check for one regardless of the
+        // lead's current status, since it may have been changed manually.
+        const hasUpcomingAppointment = await tx.leadAppointment.findFirst({
+          where: { leadId: lead.id, status: "scheduled", scheduledAt: { gte: new Date() } },
+          select: { id: true },
+        });
         const nextStatus =
           derivedStatus &&
           derivedStatus !== "scheduled" &&
@@ -56,10 +54,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           !hasUpcomingAppointment
             ? derivedStatus
             : undefined;
+        // Don't record "appointment_scheduled" as the last outcome unless an
+        // appointment actually exists, otherwise the UI implies a meeting that
+        // was never booked.
+        const recordOutcome =
+          derivedStatus === "scheduled" && !hasUpcomingAppointment ? undefined : body.outcome;
         await tx.lead.update({
           where: { id: lead.id },
           data: {
-            lastCallOutcome: body.outcome,
+            ...(recordOutcome && { lastCallOutcome: recordOutcome }),
             ...(nextStatus && { status: nextStatus }),
           },
         });
