@@ -104,7 +104,6 @@ export async function POST(req: Request) {
 
     const birthDate = body.birthDate ? parseRequiredDate(body.birthDate) : null;
     if (body.birthDate && !birthDate) return err(400, "Invalid birth date");
-    if (body.status === "scheduled") return err(400, "Use appointment scheduling to set a lead as scheduled");
 
     // Appointments are the source of truth for scheduling: a lead can't be
     // marked "scheduled" without an upcoming appointment.
