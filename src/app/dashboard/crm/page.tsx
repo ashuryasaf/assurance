@@ -235,6 +235,13 @@ export default function CrmPage() {
           }}>
             ⬇ הורד תבנית (CSV)
           </a>
+          <a href="/api/crm/export" style={{
+            padding: '6px 14px', borderRadius: '8px', border: '1px solid #cfe0ff',
+            background: '#eef5ff', color: '#2451a0', fontSize: '12px', fontWeight: '700',
+            textDecoration: 'none',
+          }}>
+            💾 הורד גיבוי לקוחות ושיחות (CSV)
+          </a>
           {uploading && <span style={{ color: '#856404' }}>⏳ מייבא...</span>}
         </div>
         {uploadError && (
