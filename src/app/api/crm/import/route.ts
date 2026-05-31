@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/dal";
 import { handleError, ok, err } from "@/lib/api";
 import { parseCustomerFile, type ParsedRow } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
-import { customerTypeFromSource } from "@/lib/crm/workflow";
+import { CUSTOMER_TYPES, customerTypeFromSource } from "@/lib/crm/workflow";
 import { canAccessCustomerType } from "@/lib/crm/access";
 import { safeJSON } from "@/lib/json";
 
@@ -53,6 +53,16 @@ export async function POST(req: Request) {
     const me = await requireRole("agent");
     const form = await req.formData();
     const file = form.get("file");
+    const requestedCustomerTypeValue = form.get("customerType");
+    const requestedCustomerType = typeof requestedCustomerTypeValue === "string" && requestedCustomerTypeValue.length > 0
+      ? requestedCustomerTypeValue
+      : undefined;
+    if (requestedCustomerType && !(CUSTOMER_TYPES as readonly string[]).includes(requestedCustomerType)) {
+      return err(400, "Invalid CRM data allocation");
+    }
+    if (requestedCustomerType && !canAccessCustomerType(me, requestedCustomerType)) {
+      return err(403, "Agent is not allowed to import this CRM data type");
+    }
     if (!(file instanceof File)) return err(400, "Missing 'file' field");
     if (file.size === 0) return err(400, "File is empty");
     if (file.size > MAX_SIZE) return err(413, "File too large (max 10 MB)");
@@ -100,7 +110,7 @@ export async function POST(req: Request) {
       const leadRow = row.lead;
       const idNumber = leadRow.idNumber;
       const source = leadRow.source ?? job.fileName;
-      const inferredCustomerType = customerTypeFromSource(source);
+      const inferredCustomerType = requestedCustomerType ?? leadRow.customerType ?? customerTypeFromSource(source);
       // Imports never create appointments, so they can't establish the
       // "scheduled" status, which is owned by the appointment flow.
       const importedStatus = leadRow.status === "scheduled" ? undefined : leadRow.status;
@@ -126,7 +136,7 @@ export async function POST(req: Request) {
         result = await prisma.$transaction(async (tx) => {
           const existing = await tx.lead.findUnique({ where: { idNumber } });
 
-          if (!existing && !canAccessCustomerType(me, inferredCustomerType)) {
+          if (!canAccessCustomerType(me, inferredCustomerType)) {
           await tx.leadImportRow.create({
             data: {
               importId: job.id,
@@ -163,12 +173,7 @@ export async function POST(req: Request) {
               where: { id: existing.id },
               data: {
                 ...stripUndefined(baseData),
-                // Only promote to real_estate when the agent is allowed to
-                // access that CRM type, otherwise keep the existing type.
-                customerType:
-                  inferredCustomerType === "real_estate" && canAccessCustomerType(me, "real_estate")
-                    ? "real_estate"
-                    : existing.customerType,
+                customerType: inferredCustomerType,
                 metadata: JSON.stringify(merged),
                 agentId: existing.agentId ?? me.id,
                 agencyId: existing.agencyId ?? me.agencyId,
@@ -223,10 +228,36 @@ export async function POST(req: Request) {
                 leadId,
                 channel: row.communication.channel,
                 direction: row.communication.direction ?? "outbound",
+                outcome: row.communication.outcome,
                 summary: row.communication.summary,
                 occurredAt: row.communication.occurredAt ? new Date(row.communication.occurredAt) : new Date(),
               },
             });
+          }
+          if (row.appointment && importedStatus !== "lost") {
+            const scheduledAt = new Date(row.appointment.scheduledAt);
+            if (!Number.isNaN(scheduledAt.getTime())) {
+              await tx.leadAppointment.create({
+                data: {
+                  leadId,
+                  title: row.appointment.title,
+                  scheduledAt,
+                  status: row.appointment.status ?? "scheduled",
+                  notes: row.appointment.notes,
+                  createdById: me.id,
+                },
+              });
+              await tx.lead.update({
+                where: { id: leadId },
+                data: {
+                  nextFollowUpAt: scheduledAt,
+                  // Only let the appointment own the "scheduled" status when the
+                  // row didn't already declare an explicit pipeline stage; an
+                  // imported "qualified"/"customer" status must not be clobbered.
+                  ...(importedStatus === undefined && { status: "scheduled" }),
+                },
+              });
+            }
           }
 
           await tx.leadImportRow.create({

@@ -1,9 +1,10 @@
 'use client';
 
 import { apiFetch, useApi } from '@/lib/client-api';
+import { useAuth } from '@/contexts/AuthContext';
 import { useState, useRef } from 'react';
 
-type CustomerType = 'general' | 'real_estate';
+type CustomerType = 'general' | 'insurance' | 'investments' | 'finance' | 'real_estate';
 type CallOutcome = 'called' | 'no_answer' | 'interested' | 'not_interested' | 'follow_up' | 'appointment_scheduled' | 'wrong_number';
 
 type LeadListItem = {
@@ -119,7 +120,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
-  general: 'כל השאר',
+  general: 'כללי / כל השימושים',
+  insurance: 'ביטוח',
+  investments: 'השקעות',
+  finance: 'פיננסים',
   real_estate: 'נדל"ן',
 };
 
@@ -135,9 +139,11 @@ const OUTCOME_LABELS: Record<CallOutcome, string> = {
 
 export default function CrmPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { canAccess } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | CustomerType>('all');
+  const [uploadCustomerType, setUploadCustomerType] = useState<CustomerType>('general');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<ImportResponse | null>(null);
@@ -181,6 +187,7 @@ export default function CrmPage() {
     try {
       const form = new FormData();
       form.append('file', files[0]);
+      form.append('customerType', uploadCustomerType);
       const resp = await apiFetch<ImportResponse>('/api/crm/import', { method: 'POST', body: form });
       setUploadResult(resp);
       await Promise.all([leadsApi.refresh(), importsApi.refresh(), appointmentsApi.refresh()]);
@@ -233,6 +240,12 @@ export default function CrmPage() {
             onChange={e => void handleUpload(e.target.files)} />
         </div>
         <div style={{ display: 'flex', gap: '10px', marginTop: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '12px', color: '#1e3a6e', fontWeight: 700 }}>
+            שימוש נתונים:
+            <select value={uploadCustomerType} onChange={e => setUploadCustomerType(e.target.value as CustomerType)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #dae8f8', color: '#1e3a6e' }}>
+              {Object.entries(CUSTOMER_TYPE_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
           <a href="/api/crm/template" style={{
             padding: '6px 14px', borderRadius: '8px', border: '1px solid #dae8f8',
             background: '#f0f6ff', color: '#1e3a6e', fontSize: '12px', fontWeight: '600',
@@ -240,13 +253,15 @@ export default function CrmPage() {
           }}>
             ⬇ הורד תבנית (CSV)
           </a>
-          <a href={`/api/crm/export${exportQuery ? `?${exportQuery}` : ''}`} style={{
-            padding: '6px 14px', borderRadius: '8px', border: '1px solid #cfe0ff',
-            background: '#eef5ff', color: '#2451a0', fontSize: '12px', fontWeight: '700',
-            textDecoration: 'none',
-          }}>
-            💾 הורד גיבוי לקוחות ושיחות (CSV)
-          </a>
+{canAccess('admin') && (
+            <a href={`/api/crm/export${exportQuery ? `?${exportQuery}` : ''}`} style={{
+              padding: '6px 14px', borderRadius: '8px', border: '1px solid #cfe0ff',
+              background: '#eef5ff', color: '#2451a0', fontSize: '12px', fontWeight: '700',
+              textDecoration: 'none',
+            }}>
+              💾 הורד גיבוי לקוחות ושיחות (CSV)
+            </a>
+          )}
           {uploading && <span style={{ color: '#856404' }}>⏳ מייבא...</span>}
         </div>
         {uploadError && (
@@ -331,8 +346,7 @@ export default function CrmPage() {
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {[
             ['all', 'הכל'],
-            ['real_estate', CUSTOMER_TYPE_LABELS.real_estate],
-            ['general', CUSTOMER_TYPE_LABELS.general],
+            ...Object.entries(CUSTOMER_TYPE_LABELS),
           ].map(([k, label]) => (
             <button key={k} onClick={() => setCustomerTypeFilter(k as 'all' | CustomerType)} style={{
               padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',

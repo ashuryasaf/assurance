@@ -297,7 +297,7 @@ model Lead {
   birthDate       DateTime?
   gender          String?
   source          String?
-  customerType    String    @default("general") // general | real_estate
+  customerType    String    @default("general") // general | insurance | investments | finance | real_estate
   status          String    @default("new") // new | contacted | scheduled | qualified | customer | lost
   lastCallOutcome String? // called | no_answer | interested | not_interested | follow_up | appointment_scheduled | wrong_number
   nextFollowUpAt  DateTime?

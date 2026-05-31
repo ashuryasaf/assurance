@@ -14,7 +14,7 @@ type ApiAgent = {
   role: UserRole;
   licenseNumber?: string;
   isActive: boolean;
-  crmCustomerTypes: Array<'general' | 'real_estate'>;
+  crmCustomerTypes: Array<'general' | 'insurance' | 'investments' | 'finance' | 'real_estate'>;
 };
 
 type ApiSubAgency = {
@@ -47,7 +47,7 @@ export default function AgencyPage() {
   const [showAddAgent, setShowAddAgent] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'agent' | 'sub_agent'>('agent');
-  const [crmAccessMode, setCrmAccessMode] = useState<'all' | 'real_estate' | 'general'>('all');
+  const [crmAccessMode, setCrmAccessMode] = useState<'all' | 'general' | 'insurance' | 'investments' | 'finance' | 'real_estate'>('all');
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -78,7 +78,7 @@ export default function AgencyPage() {
     setInviteUrl(null);
     try {
       const crmCustomerTypes = crmAccessMode === 'all'
-        ? ['general', 'real_estate']
+        ? ['general', 'insurance', 'investments', 'finance', 'real_estate']
         : [crmAccessMode];
       const response = await apiFetch<{ token: string }>('/api/auth/invite', {
         method: 'POST',
@@ -260,10 +260,13 @@ export default function AgencyPage() {
               </select>
             </InviteField>
             <InviteField label="הגבלת גישה לנתוני CRM">
-              <select value={crmAccessMode} onChange={e => setCrmAccessMode(e.target.value as 'all' | 'real_estate' | 'general')} style={inviteInputStyle}>
+              <select value={crmAccessMode} onChange={e => setCrmAccessMode(e.target.value as 'all' | 'general' | 'insurance' | 'investments' | 'finance' | 'real_estate')} style={inviteInputStyle}>
                 <option value="all">כל הלקוחות</option>
+                <option value="general">כללי / כל השימושים</option>
+                <option value="insurance">ביטוח בלבד</option>
+                <option value="investments">השקעות בלבד</option>
+                <option value="finance">פיננסים בלבד</option>
                 <option value="real_estate">נדל&quot;ן בלבד</option>
-                <option value="general">כל השאר בלבד</option>
               </select>
             </InviteField>
             {inviteUrl && (
@@ -297,8 +300,15 @@ function InviteField({ label, children }: { label: string; children: React.React
   );
 }
 
-function formatCrmAccess(types: Array<'general' | 'real_estate'>): string {
+function formatCrmAccess(types: Array<'general' | 'insurance' | 'investments' | 'finance' | 'real_estate'>): string {
+  const labels: Record<'general' | 'insurance' | 'investments' | 'finance' | 'real_estate', string> = {
+    general: 'כללי / כל השימושים',
+    insurance: 'ביטוח בלבד',
+    investments: 'השקעות בלבד',
+    finance: 'פיננסים בלבד',
+    real_estate: 'נדל"ן בלבד',
+  };
   const unique = Array.from(new Set(types));
   if (unique.length === 0 || unique.length > 1) return 'כל הלקוחות';
-  return unique[0] === 'real_estate' ? 'נדל"ן בלבד' : 'כל השאר בלבד';
+  return labels[unique[0]];
 }

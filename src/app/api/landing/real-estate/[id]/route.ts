@@ -5,7 +5,7 @@ import { HttpError, requireRole } from "@/lib/dal";
 import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
 import { safeJSON } from "@/lib/json";
-import { customerTypeFromSource } from "@/lib/crm/workflow";
+import { customerTypeFromCampaign } from "@/lib/crm/workflow";
 import { canAccessCustomerType, crmCustomerTypesFromPermissions } from "@/lib/crm/access";
 
 const patchSchema = z.object({
@@ -34,7 +34,7 @@ async function canAssignLandingLead(
   // would be locked out by canAccessLandingLead on every subsequent access.
   if (assignee.role !== "agency_owner") {
     const allowedTypes = crmCustomerTypesFromPermissions(safeJSON<string[]>(assignee.permissions, []));
-    const leadType = customerTypeFromSource(lead.campaignType);
+    const leadType = customerTypeFromCampaign(lead.campaignType);
     if (allowedTypes && !allowedTypes.includes(leadType)) return false;
   }
   if (me.role === "super_admin" || me.role === "admin") return true;
@@ -45,7 +45,7 @@ async function canAssignLandingLead(
 async function canAccessLandingLead(me: { role: string; id: string; agencyId?: string; permissions: string[] }, lead: { assignedAgentId: string | null; campaignType?: string }) {
   if (me.role !== "super_admin" && me.role !== "admin" && me.role !== "agency_owner") {
     const allowedTypes = crmCustomerTypesFromPermissions(me.permissions);
-    const leadType = customerTypeFromSource(lead.campaignType);
+    const leadType = customerTypeFromCampaign(lead.campaignType);
     if (allowedTypes && !allowedTypes.includes(leadType)) return false;
   }
   if (me.role === "super_admin" || me.role === "admin") return true;
@@ -153,7 +153,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       ...(existingCrmLead ? safeJSON<Record<string, unknown>>(existingCrmLead.metadata, {}) : {}),
       ...landingMetadata,
     });
-    const customerType = customerTypeFromSource(lead.campaignType);
+    const customerType = customerTypeFromCampaign(lead.campaignType);
 
     const { crmLead, updated } = await prisma.$transaction(async (tx) => {
       const crmLead = await tx.lead.upsert({
@@ -179,8 +179,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           email: lead.email ?? undefined,
           notes: lead.notes ?? undefined,
           source: lead.source ?? `${lead.campaignType}-landing`,
-          // Only promote to real_estate when the agent is allowed that CRM type.
-          ...(customerType === "real_estate" && canAccessCustomerType(me, "real_estate") && { customerType: "real_estate" }),
+          // Only move an existing CRM record into a specific data segment when
+          // the actor is allowed to manage that segment; never downgrade to
+          // generic from a campaign merge.
+          ...(customerType !== "general" && canAccessCustomerType(me, customerType) && { customerType }),
           metadata,
         },
       });

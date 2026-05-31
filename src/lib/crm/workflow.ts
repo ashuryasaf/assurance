@@ -1,4 +1,4 @@
-export const CUSTOMER_TYPES = ["general", "real_estate"] as const;
+export const CUSTOMER_TYPES = ["general", "insurance", "investments", "finance", "real_estate"] as const;
 export type CustomerType = (typeof CUSTOMER_TYPES)[number];
 
 export const LEAD_STATUSES = ["new", "contacted", "scheduled", "qualified", "customer", "lost"] as const;
@@ -37,6 +37,15 @@ export function isRealEstateSource(value: string | null | undefined): boolean {
 
 export function customerTypeFromSource(value: string | null | undefined): CustomerType {
   return isRealEstateSource(value) ? "real_estate" : "general";
+}
+
+// Maps a landing-page campaign type to its CRM customer type. This must stay in
+// sync with landingCampaignScope so that segment-restricted agents who can see a
+// campaign can also access and convert its leads into their CRM segment.
+export function customerTypeFromCampaign(campaignType: string | null | undefined): CustomerType {
+  if (campaignType === "insurance") return "insurance";
+  if (campaignType === "investments") return "investments";
+  return customerTypeFromSource(campaignType);
 }
 
 export function parseRequiredDate(value: string): Date | null {
