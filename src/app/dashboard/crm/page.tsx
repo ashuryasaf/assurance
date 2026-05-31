@@ -148,6 +148,11 @@ export default function CrmPage() {
   if (customerTypeFilter !== 'all') leadQueryParams.set('customerType', customerTypeFilter);
   const leadQuery = leadQueryParams.toString();
 
+  // Keep the backup download in sync with the on-screen filters.
+  const exportQueryParams = new URLSearchParams(leadQueryParams);
+  if (search.trim()) exportQueryParams.set('q', search.trim());
+  const exportQuery = exportQueryParams.toString();
+
   const appointmentQueryParams = new URLSearchParams();
   if (customerTypeFilter !== 'all') appointmentQueryParams.set('customerType', customerTypeFilter);
   const appointmentQuery = appointmentQueryParams.toString();
@@ -235,7 +240,7 @@ export default function CrmPage() {
           }}>
             ⬇ הורד תבנית (CSV)
           </a>
-          <a href="/api/crm/export" style={{
+          <a href={`/api/crm/export${exportQuery ? `?${exportQuery}` : ''}`} style={{
             padding: '6px 14px', borderRadius: '8px', border: '1px solid #cfe0ff',
             background: '#eef5ff', color: '#2451a0', fontSize: '12px', fontWeight: '700',
             textDecoration: 'none',

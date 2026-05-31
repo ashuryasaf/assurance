@@ -77,6 +77,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             ...(nextStatus === "lost" && { nextFollowUpAt: null }),
           },
         });
+        // A lost lead is terminal: cancel any future follow-up meetings so they
+        // don't linger on the agent calendar.
+        if (nextStatus === "lost") {
+          await tx.leadAppointment.updateMany({
+            where: { leadId: lead.id, status: "scheduled" },
+            data: { status: "cancelled" },
+          });
+        }
       }
 
       return communication;

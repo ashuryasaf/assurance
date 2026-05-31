@@ -6,7 +6,7 @@ import { normaliseIdNumber } from "@/lib/crm/parse";
 import { canModifyLead } from "@/lib/scope";
 import { safeJSON } from "@/lib/json";
 import { customerTypeFromSource } from "@/lib/crm/workflow";
-import { crmCustomerTypesFromPermissions } from "@/lib/crm/access";
+import { canAccessCustomerType, crmCustomerTypesFromPermissions } from "@/lib/crm/access";
 
 const patchSchema = z.object({
   status: z.enum(["new", "contacted", "scheduled", "qualified", "lost"]).optional(),
@@ -15,7 +15,11 @@ const patchSchema = z.object({
 });
 
 
-async function canAssignLandingLead(me: { role: string; id: string; agencyId?: string }, assignedAgentId: string | null | undefined) {
+async function canAssignLandingLead(
+  me: { role: string; id: string; agencyId?: string },
+  assignedAgentId: string | null | undefined,
+  lead: { campaignType?: string },
+) {
   if (assignedAgentId === undefined || assignedAgentId === null) return true;
   if (me.role !== "super_admin" && me.role !== "admin" && me.role !== "agency_owner" && assignedAgentId !== me.id) {
     return false;
@@ -23,9 +27,16 @@ async function canAssignLandingLead(me: { role: string; id: string; agencyId?: s
 
   const assignee = await prisma.user.findUnique({
     where: { id: assignedAgentId },
-    select: { role: true, agencyId: true, isActive: true },
+    select: { role: true, agencyId: true, isActive: true, permissions: true },
   });
   if (!assignee?.isActive || !["agent", "sub_agent", "agency_owner"].includes(assignee.role)) return false;
+  // The assignee must be allowed to work the lead's CRM customer type, or they
+  // would be locked out by canAccessLandingLead on every subsequent access.
+  if (assignee.role !== "agency_owner") {
+    const allowedTypes = crmCustomerTypesFromPermissions(safeJSON<string[]>(assignee.permissions, []));
+    const leadType = customerTypeFromSource(lead.campaignType);
+    if (allowedTypes && !allowedTypes.includes(leadType)) return false;
+  }
   if (me.role === "super_admin" || me.role === "admin") return true;
   if (!me.agencyId) return assignedAgentId === me.id;
   return assignee.agencyId === me.agencyId;
@@ -66,7 +77,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
 
     const body = await parseJSON(req, patchSchema);
-    if (!(await canAssignLandingLead(me, body.assignedAgentId))) {
+    if (!(await canAssignLandingLead(me, body.assignedAgentId, lead))) {
       return err(403, "Cannot assign lead to that agent");
     }
 
@@ -168,7 +179,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           email: lead.email ?? undefined,
           notes: lead.notes ?? undefined,
           source: lead.source ?? `${lead.campaignType}-landing`,
-          ...(customerType === "real_estate" && { customerType: "real_estate" }),
+          // Only promote to real_estate when the agent is allowed that CRM type.
+          ...(customerType === "real_estate" && canAccessCustomerType(me, "real_estate") && { customerType: "real_estate" }),
           metadata,
         },
       });

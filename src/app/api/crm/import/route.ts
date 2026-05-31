@@ -163,7 +163,12 @@ export async function POST(req: Request) {
               where: { id: existing.id },
               data: {
                 ...stripUndefined(baseData),
-                customerType: inferredCustomerType === "real_estate" ? "real_estate" : existing.customerType,
+                // Only promote to real_estate when the agent is allowed to
+                // access that CRM type, otherwise keep the existing type.
+                customerType:
+                  inferredCustomerType === "real_estate" && canAccessCustomerType(me, "real_estate")
+                    ? "real_estate"
+                    : existing.customerType,
                 metadata: JSON.stringify(merged),
                 agentId: existing.agentId ?? me.id,
                 agencyId: existing.agencyId ?? me.agencyId,
@@ -185,6 +190,15 @@ export async function POST(req: Request) {
             });
             leadId = created.id;
             rowStatus = "created";
+          }
+
+          // A lost lead is terminal: cancel any future follow-up meetings so
+          // they don't linger on the agent calendar.
+          if (importedStatus === "lost") {
+            await tx.leadAppointment.updateMany({
+              where: { leadId, status: "scheduled" },
+              data: { status: "cancelled" },
+            });
           }
 
           // Optional 1:N data attached to the same id.

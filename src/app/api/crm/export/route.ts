@@ -69,6 +69,7 @@ export async function GET(req: Request) {
     const leads = await prisma.lead.findMany({
       where,
       orderBy: [{ updatedAt: "desc" }, { idNumber: "asc" }],
+      take: 500,
       include: {
         communications: { orderBy: { occurredAt: "desc" } },
         appointments: { orderBy: { scheduledAt: "asc" } },

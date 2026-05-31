@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { HttpError, requireRole } from "@/lib/dal";
 import { handleError, ok, parseJSON, err } from "@/lib/api";
 import { serializeLead, serializeLeadPolicy, serializeLeadComm, serializeLeadAppointment } from "@/lib/crm/serializers";
-import { canSeeLead, loadLead } from "@/lib/crm/access";
+import { canAccessCustomerType, canSeeLead, loadLead } from "@/lib/crm/access";
 import { CUSTOMER_TYPES, LEAD_STATUSES, parseRequiredDate } from "@/lib/crm/workflow";
 import { safeJSON } from "@/lib/json";
 
@@ -72,6 +72,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!lead) return err(404, "Lead not found");
     if (!canSeeLead(me, lead)) throw new HttpError(403, "Forbidden");
     const body = await parseJSON(req, patchSchema);
+    // Reclassifying a lead must respect the agent's allowed CRM types, otherwise
+    // they could move it into a segment they aren't permitted to manage.
+    if (body.customerType !== undefined && !canAccessCustomerType(me, body.customerType)) {
+      throw new HttpError(403, "Agent is not allowed to access this CRM data type");
+    }
     const birthDate = body.birthDate !== undefined && body.birthDate ? parseRequiredDate(body.birthDate) : null;
     if (body.birthDate && !birthDate) return err(400, "Invalid birth date");
 
@@ -113,6 +118,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ...(body.metadata !== undefined && { metadata: JSON.stringify({ ...safeJSON<Record<string, unknown>>(lead.metadata, {}), ...body.metadata }) }),
       },
     });
+    // A lost lead is terminal: cancel any future follow-up meetings so they
+    // don't linger on the agent calendar.
+    if (body.status === "lost") {
+      await prisma.leadAppointment.updateMany({
+        where: { leadId: lead.id, status: "scheduled" },
+        data: { status: "cancelled" },
+      });
+    }
     return ok({ lead: serializeLead(updated) });
   } catch (error) {
     return handleError(error);
