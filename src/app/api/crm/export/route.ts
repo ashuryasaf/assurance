@@ -18,8 +18,8 @@ export async function GET(req: Request) {
   try {
     // Full customer exports are backups and may contain broad PII, so only
     // admins/super-admins may download them.
-    await requireRole("admin");
-    await reconcileStaleAppointments();
+    const me = await requireRole("admin");
+    await reconcileStaleAppointments(me);
     const url = new URL(req.url);
     const search = url.searchParams.get("q")?.trim() ?? "";
     const status = url.searchParams.get("status");
@@ -40,9 +40,9 @@ export async function GET(req: Request) {
       orderBy: [{ updatedAt: "desc" }, { idNumber: "asc" }],
       take: 500,
       include: {
-        communications: { orderBy: { occurredAt: "desc" }, take: 200 },
-        appointments: { orderBy: { scheduledAt: "asc" }, take: 200 },
-        policies: { orderBy: { createdAt: "desc" }, take: 200 },
+        communications: { orderBy: { occurredAt: "desc" } },
+        appointments: { orderBy: { scheduledAt: "asc" } },
+        policies: { orderBy: { createdAt: "desc" } },
       },
     });
 

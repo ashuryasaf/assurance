@@ -39,6 +39,15 @@ export function customerTypeFromSource(value: string | null | undefined): Custom
   return isRealEstateSource(value) ? "real_estate" : "general";
 }
 
+// Maps a landing-page campaign type to its CRM customer type. This must stay in
+// sync with landingCampaignScope so that segment-restricted agents who can see a
+// campaign can also access and convert its leads into their CRM segment.
+export function customerTypeFromCampaign(campaignType: string | null | undefined): CustomerType {
+  if (campaignType === "insurance") return "insurance";
+  if (campaignType === "investments") return "investments";
+  return customerTypeFromSource(campaignType);
+}
+
 export function parseRequiredDate(value: string): Date | null {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;

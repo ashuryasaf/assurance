@@ -21,7 +21,7 @@ function isCustomerType(value: string): value is (typeof CUSTOMER_TYPES)[number]
 export async function GET(req: Request) {
   try {
     const me = await requireRole("agent");
-    await reconcileStaleAppointments();
+    await reconcileStaleAppointments(me);
     const url = new URL(req.url);
     const search = url.searchParams.get("q")?.trim() ?? "";
     const status = url.searchParams.get("status");

@@ -1,18 +1,26 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import type { CurrentUser } from "@/lib/dal";
+import { leadScopeFilter } from "@/lib/crm/access";
 
 // There is no background worker in this app, so CRM read paths opportunistically
 // reconcile overdue appointments before returning calendar/list/export data.
-export async function reconcileStaleAppointments(now = new Date()) {
+// Reconciliation is scoped to the leads the caller is allowed to see, so one
+// tenant's browsing never mutates another agency's appointments or pipeline.
+export async function reconcileStaleAppointments(me: CurrentUser, now = new Date()) {
+  const scope = leadScopeFilter(me);
+
   await prisma.leadAppointment.updateMany({
-    where: { status: "scheduled", scheduledAt: { lt: now } },
+    where: { status: "scheduled", scheduledAt: { lt: now }, lead: scope },
     data: { status: "completed" },
   });
 
   const staleScheduledLeads = await prisma.lead.findMany({
     where: {
-      status: "scheduled",
-      OR: [{ nextFollowUpAt: null }, { nextFollowUpAt: { lt: now } }],
+      AND: [
+        scope,
+        { status: "scheduled", OR: [{ nextFollowUpAt: null }, { nextFollowUpAt: { lt: now } }] },
+      ],
     },
     select: { id: true },
     take: 500,

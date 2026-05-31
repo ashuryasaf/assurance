@@ -202,6 +202,19 @@ function readDate(row: RawRow, aliases: string[]): string | undefined {
   return undefined;
 }
 
+// Like readDate, but preserves the time-of-day for values that carry one (e.g.
+// the ISO timestamps produced by the export), so a round-tripped appointment or
+// communication keeps its original time instead of snapping to UTC midnight.
+function readDateTime(row: RawRow, aliases: string[]): string | undefined {
+  const str = readString(row, aliases);
+  if (!str) return undefined;
+  if (/^\d{4}-\d{1,2}-\d{1,2}[T\s]\d/.test(str)) {
+    const d = new Date(str);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return readDate(row, aliases);
+}
+
 export function normaliseIdNumber(id: string | undefined | null): string | undefined {
   if (!id) return undefined;
   const digits = String(id).replace(/[^\d]/g, "");
@@ -286,12 +299,12 @@ export function parseCustomerFile(buffer: Buffer, filename: string): ParsedRow[]
         channel: commChannel ?? "other",
         direction: readString(row, COMM_ALIASES.direction) ?? "outbound",
         summary: commSummary,
-        occurredAt: readDate(row, COMM_ALIASES.occurredAt),
+        occurredAt: readDateTime(row, COMM_ALIASES.occurredAt),
         outcome: readString(row, COMM_ALIASES.outcome),
       };
     }
 
-    const appointmentDate = readDate(row, APPOINTMENT_ALIASES.scheduledAt);
+    const appointmentDate = readDateTime(row, APPOINTMENT_ALIASES.scheduledAt);
     if (appointmentDate) {
       result.appointment = {
         title: readString(row, APPOINTMENT_ALIASES.title) ?? "Follow-up",

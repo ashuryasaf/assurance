@@ -249,7 +249,13 @@ export async function POST(req: Request) {
               });
               await tx.lead.update({
                 where: { id: leadId },
-                data: { nextFollowUpAt: scheduledAt, status: "scheduled" },
+                data: {
+                  nextFollowUpAt: scheduledAt,
+                  // Only let the appointment own the "scheduled" status when the
+                  // row didn't already declare an explicit pipeline stage; an
+                  // imported "qualified"/"customer" status must not be clobbered.
+                  ...(importedStatus === undefined && { status: "scheduled" }),
+                },
               });
             }
           }
