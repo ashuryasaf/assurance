@@ -8,6 +8,7 @@ import { canModifyLead } from "@/lib/scope";
 import { safeJSON } from "@/lib/json";
 import { canAccessCustomerType, leadScopeFilter } from "@/lib/crm/access";
 import { CUSTOMER_TYPES, LEAD_STATUSES, customerTypeFromSource, parseRequiredDate } from "@/lib/crm/workflow";
+import { reconcileStaleAppointments } from "@/lib/crm/reconcile";
 
 function isLeadStatus(value: string): value is (typeof LEAD_STATUSES)[number] {
   return (LEAD_STATUSES as readonly string[]).includes(value);
@@ -20,6 +21,7 @@ function isCustomerType(value: string): value is (typeof CUSTOMER_TYPES)[number]
 export async function GET(req: Request) {
   try {
     const me = await requireRole("agent");
+    await reconcileStaleAppointments();
     const url = new URL(req.url);
     const search = url.searchParams.get("q")?.trim() ?? "";
     const status = url.searchParams.get("status");

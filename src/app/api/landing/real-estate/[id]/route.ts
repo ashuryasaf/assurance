@@ -179,8 +179,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           email: lead.email ?? undefined,
           notes: lead.notes ?? undefined,
           source: lead.source ?? `${lead.campaignType}-landing`,
-          // Only promote to real_estate when the agent is allowed that CRM type.
-          ...(customerType === "real_estate" && canAccessCustomerType(me, "real_estate") && { customerType: "real_estate" }),
+          // Only move an existing CRM record into a specific data segment when
+          // the actor is allowed to manage that segment; never downgrade to
+          // generic from a campaign merge.
+          ...(customerType !== "general" && canAccessCustomerType(me, customerType) && { customerType }),
           metadata,
         },
       });

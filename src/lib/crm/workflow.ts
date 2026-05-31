@@ -1,4 +1,4 @@
-export const CUSTOMER_TYPES = ["general", "real_estate"] as const;
+export const CUSTOMER_TYPES = ["general", "insurance", "investments", "finance", "real_estate"] as const;
 export type CustomerType = (typeof CUSTOMER_TYPES)[number];
 
 export const LEAD_STATUSES = ["new", "contacted", "scheduled", "qualified", "customer", "lost"] as const;

@@ -1,7 +1,41 @@
 import "server-only";
 import Papa from "papaparse";
+import { CUSTOMER_TYPES, customerTypeFromSource, type CustomerType } from "@/lib/crm/workflow";
 
 export type RawRow = Record<string, unknown>;
+
+export const CRM_CSV_HEADERS = [
+  "שימוש נתונים",
+  "ת.ז",
+  "שם פרטי",
+  "שם משפחה",
+  "אימייל",
+  "טלפון",
+  "טלפון נוסף",
+  "כתובת",
+  "עיר",
+  "תאריך לידה",
+  "מין",
+  "סטטוס",
+  "מקור",
+  "מספר פוליסה",
+  "סוג ביטוח",
+  "חברה",
+  "סטטוס פוליסה",
+  "פרמיה",
+  "תאריך התחלה",
+  "תאריך סיום",
+  "ערוץ",
+  "כיוון",
+  "תאריך שיחה",
+  "אינדיקציית שיחה",
+  "סיכום שיחה",
+  "כותרת פגישה",
+  "תאריך פגישה",
+  "סטטוס פגישה",
+  "הערות פגישה",
+  "הערות",
+] as const;
 
 export type LeadCore = {
   idNumber: string;
@@ -17,6 +51,7 @@ export type LeadCore = {
   notes?: string;
   status?: string;
   source?: string;
+  customerType?: CustomerType;
 };
 
 export type ParsedRow = {
@@ -37,6 +72,13 @@ export type ParsedRow = {
     direction?: string;
     summary: string;
     occurredAt?: string;
+    outcome?: string;
+  };
+  appointment?: {
+    title: string;
+    scheduledAt: string;
+    status?: string;
+    notes?: string;
   };
   metadata: RawRow;
   error?: string;
@@ -71,6 +113,7 @@ const FIELD_ALIASES: Record<keyof LeadCore, string[]> = {
   notes: ["notes", "comment", "comments", "remarks", "הערות", "תיאור", "פרטים"],
   status: ["status", "stage", "state", "סטטוס", "מצב"],
   source: ["source", "channel", "מקור"],
+  customerType: ["customertype", "customer_type", "datause", "data_use", "database", "databaseuse", "שימוש נתונים", "סוג נתונים", "מאגר", "מאגר נתונים"],
 };
 
 const POLICY_ALIASES: Record<string, string[]> = {
@@ -88,6 +131,14 @@ const COMM_ALIASES: Record<string, string[]> = {
   direction: ["direction", "כיוון"],
   summary: ["communication", "summary", "call_summary", "תקשורת", "סיכום", "סיכום שיחה", "תיאור שיחה"],
   occurredAt: ["communicationdate", "calldate", "תאריך שיחה", "תאריך תקשורת"],
+  outcome: ["outcome", "calloutcome", "call_outcome", "אינדיקציית שיחה", "תוצאת שיחה"],
+};
+
+const APPOINTMENT_ALIASES: Record<string, string[]> = {
+  title: ["appointmenttitle", "appointment_title", "followuptitle", "כותרת פגישה", "כותרת פולואפ"],
+  scheduledAt: ["appointmentdate", "appointment_date", "scheduledat", "scheduled_at", "followupdate", "תאריך פגישה", "תאריך פולואפ"],
+  status: ["appointmentstatus", "appointment_status", "סטטוס פגישה"],
+  notes: ["appointmentnotes", "appointment_notes", "followupnotes", "הערות פגישה", "הערות פולואפ"],
 };
 
 function normaliseHeader(h: string): string {
@@ -121,6 +172,17 @@ function readNumber(row: RawRow, aliases: string[]): number | undefined {
   const cleaned = str.replace(/[^\d.\-,]/g, "").replace(/,/g, "");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function parseCustomerType(value: string | undefined): CustomerType | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase().replace(/[\s_\-]+/g, "");
+  if (["all", "general", "כללי", "כולם", "allcustomers"].includes(normalized)) return "general";
+  if (["realestate", "נדלן", "נדל\"ן"].includes(normalized)) return "real_estate";
+  if (["insurance", "ביטוח"].includes(normalized)) return "insurance";
+  if (["investments", "investment", "השקעות", "השקעה"].includes(normalized)) return "investments";
+  if (["finance", "financial", "banking", "פיננס", "פיננסים", "מימון"].includes(normalized)) return "finance";
+  return CUSTOMER_TYPES.includes(value as CustomerType) ? (value as CustomerType) : customerTypeFromSource(value);
 }
 
 function readDate(row: RawRow, aliases: string[]): string | undefined {
@@ -164,6 +226,7 @@ export function parseCustomerFile(buffer: Buffer, filename: string): ParsedRow[]
   for (const list of Object.values(FIELD_ALIASES)) list.forEach((a) => knownKeys.add(normaliseHeader(a)));
   for (const list of Object.values(POLICY_ALIASES)) list.forEach((a) => knownKeys.add(normaliseHeader(a)));
   for (const list of Object.values(COMM_ALIASES)) list.forEach((a) => knownKeys.add(normaliseHeader(a)));
+  for (const list of Object.values(APPOINTMENT_ALIASES)) list.forEach((a) => knownKeys.add(normaliseHeader(a)));
 
   return rows.map((row, rowIndex): ParsedRow => {
     const idNumberRaw = readString(row, FIELD_ALIASES.idNumber);
@@ -197,6 +260,7 @@ export function parseCustomerFile(buffer: Buffer, filename: string): ParsedRow[]
       notes: readString(row, FIELD_ALIASES.notes),
       status: readString(row, FIELD_ALIASES.status),
       source: readString(row, FIELD_ALIASES.source),
+      customerType: parseCustomerType(readString(row, FIELD_ALIASES.customerType)),
     };
 
     const policyNumber = readString(row, POLICY_ALIASES.policyNumber);
@@ -223,6 +287,17 @@ export function parseCustomerFile(buffer: Buffer, filename: string): ParsedRow[]
         direction: readString(row, COMM_ALIASES.direction) ?? "outbound",
         summary: commSummary,
         occurredAt: readDate(row, COMM_ALIASES.occurredAt),
+        outcome: readString(row, COMM_ALIASES.outcome),
+      };
+    }
+
+    const appointmentDate = readDate(row, APPOINTMENT_ALIASES.scheduledAt);
+    if (appointmentDate) {
+      result.appointment = {
+        title: readString(row, APPOINTMENT_ALIASES.title) ?? "Follow-up",
+        scheduledAt: appointmentDate,
+        status: readString(row, APPOINTMENT_ALIASES.status),
+        notes: readString(row, APPOINTMENT_ALIASES.notes),
       };
     }
 

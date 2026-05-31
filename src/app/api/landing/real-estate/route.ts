@@ -7,7 +7,8 @@ import { checkRate, clientIp } from "@/lib/throttle";
 
 const CAMPAIGN_TYPES = ["real-estate", "insurance", "investments", "kadima-real-estate"] as const;
 const REAL_ESTATE_CAMPAIGNS = ["real-estate", "kadima-real-estate"];
-const GENERAL_CAMPAIGNS = ["insurance", "investments"];
+const INSURANCE_CAMPAIGNS = ["insurance"];
+const INVESTMENT_CAMPAIGNS = ["investments"];
 
 function landingCampaignScope(me: { role: string; permissions: string[] }): string[] | undefined {
   if (me.role === "super_admin" || me.role === "admin" || me.role === "agency_owner") return undefined;
@@ -15,7 +16,8 @@ function landingCampaignScope(me: { role: string; permissions: string[] }): stri
   if (!customerTypes) return undefined;
   const campaigns = new Set<string>();
   if (customerTypes.includes("real_estate")) REAL_ESTATE_CAMPAIGNS.forEach((campaign) => campaigns.add(campaign));
-  if (customerTypes.includes("general")) GENERAL_CAMPAIGNS.forEach((campaign) => campaigns.add(campaign));
+  if (customerTypes.includes("insurance")) INSURANCE_CAMPAIGNS.forEach((campaign) => campaigns.add(campaign));
+  if (customerTypes.includes("investments")) INVESTMENT_CAMPAIGNS.forEach((campaign) => campaigns.add(campaign));
   return Array.from(campaigns);
 }
 

@@ -6,10 +6,12 @@ import { serializeLead, serializeLeadPolicy, serializeLeadComm, serializeLeadApp
 import { canAccessCustomerType, canSeeLead, loadLead } from "@/lib/crm/access";
 import { CUSTOMER_TYPES, LEAD_STATUSES, parseRequiredDate } from "@/lib/crm/workflow";
 import { safeJSON } from "@/lib/json";
+import { reconcileStaleAppointments } from "@/lib/crm/reconcile";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const me = await requireRole("agent");
+    await reconcileStaleAppointments();
     const { id } = await ctx.params;
     const lead = await loadLead(id);
     if (!lead) return err(404, "Lead not found");

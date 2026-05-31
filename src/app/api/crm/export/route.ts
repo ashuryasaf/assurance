@@ -2,43 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { handleError, err } from "@/lib/api";
 import { requireRole } from "@/lib/dal";
-import { leadScopeFilter } from "@/lib/crm/access";
+import { CRM_CSV_HEADERS } from "@/lib/crm/parse";
 import { CUSTOMER_TYPES, LEAD_STATUSES } from "@/lib/crm/workflow";
-
-const HEADERS = [
-  "record_type",
-  "customer_id",
-  "id_number",
-  "first_name",
-  "last_name",
-  "full_name",
-  "customer_type",
-  "lead_status",
-  "last_call_outcome",
-  "next_follow_up_at",
-  "phone",
-  "alt_phone",
-  "email",
-  "city",
-  "address",
-  "source",
-  "customer_notes",
-  "record_date",
-  "record_status",
-  "record_channel",
-  "record_direction",
-  "record_outcome",
-  "record_title",
-  "record_notes",
-  "policy_number",
-  "policy_type",
-  "policy_provider",
-  "policy_premium",
-  "import_file",
-  "import_row",
-  "created_at",
-  "updated_at",
-];
+import { reconcileStaleAppointments } from "@/lib/crm/reconcile";
 
 function isLeadStatus(value: string): value is (typeof LEAD_STATUSES)[number] {
   return (LEAD_STATUSES as readonly string[]).includes(value);
@@ -50,12 +16,15 @@ function isCustomerType(value: string): value is (typeof CUSTOMER_TYPES)[number]
 
 export async function GET(req: Request) {
   try {
-    const me = await requireRole("agent");
+    // Full customer exports are backups and may contain broad PII, so only
+    // admins/super-admins may download them.
+    await requireRole("admin");
+    await reconcileStaleAppointments();
     const url = new URL(req.url);
     const search = url.searchParams.get("q")?.trim() ?? "";
     const status = url.searchParams.get("status");
     const customerType = url.searchParams.get("customerType");
-    const where: Record<string, unknown> = { ...leadScopeFilter(me) };
+    const where: Record<string, unknown> = {};
 
     if (status) {
       if (!isLeadStatus(status)) return err(400, "Invalid lead status");
@@ -71,13 +40,9 @@ export async function GET(req: Request) {
       orderBy: [{ updatedAt: "desc" }, { idNumber: "asc" }],
       take: 500,
       include: {
-        communications: { orderBy: { occurredAt: "desc" } },
-        appointments: { orderBy: { scheduledAt: "asc" } },
-        policies: { orderBy: { createdAt: "desc" } },
-        importRows: {
-          orderBy: { rowIndex: "asc" },
-          include: { import: { select: { fileName: true, createdAt: true } } },
-        },
+        communications: { orderBy: { occurredAt: "desc" }, take: 200 },
+        appointments: { orderBy: { scheduledAt: "asc" }, take: 200 },
+        policies: { orderBy: { createdAt: "desc" }, take: 200 },
       },
     });
 
@@ -88,58 +53,43 @@ export async function GET(req: Request) {
         })
       : leads;
 
-    const rows = [HEADERS];
+    const rows: string[][] = [[...CRM_CSV_HEADERS]];
     for (const lead of filtered) {
-      rows.push(baseRow(lead, "customer", {
-        recordDate: lead.updatedAt,
-        recordStatus: lead.status,
-        recordNotes: lead.notes ?? "",
-      }));
+      let wroteRelatedRow = false;
+      const push = (fields: Partial<CsvRecord>) => {
+        rows.push(rowFor(lead, fields));
+        wroteRelatedRow = true;
+      };
 
       for (const communication of lead.communications) {
-        rows.push(baseRow(lead, "communication", {
-          recordDate: communication.occurredAt,
-          recordChannel: communication.channel,
-          recordDirection: communication.direction,
-          recordOutcome: communication.outcome ?? "",
-          recordNotes: communication.summary,
-          createdAt: communication.createdAt,
-        }));
+        push({
+          channel: communication.channel,
+          direction: communication.direction,
+          communicationDate: toIso(communication.occurredAt),
+          communicationOutcome: communication.outcome ?? "",
+          communicationSummary: communication.summary,
+        });
       }
-
       for (const appointment of lead.appointments) {
-        rows.push(baseRow(lead, "appointment", {
-          recordDate: appointment.scheduledAt,
-          recordStatus: appointment.status,
-          recordTitle: appointment.title,
-          recordNotes: appointment.notes ?? "",
-          createdAt: appointment.createdAt,
-          updatedAt: appointment.updatedAt,
-        }));
+        push({
+          appointmentTitle: appointment.title,
+          appointmentDate: toIso(appointment.scheduledAt),
+          appointmentStatus: appointment.status,
+          appointmentNotes: appointment.notes ?? "",
+        });
       }
-
       for (const policy of lead.policies) {
-        rows.push(baseRow(lead, "policy", {
-          recordDate: policy.createdAt,
-          recordStatus: policy.status ?? "",
+        push({
           policyNumber: policy.policyNumber ?? "",
           policyType: policy.type ?? "",
           policyProvider: policy.provider ?? "",
-          policyPremium: policy.premium?.toString() ?? "",
-          createdAt: policy.createdAt,
-        }));
+          policyStatus: policy.status ?? "",
+          premium: policy.premium?.toString() ?? "",
+          startDate: toDate(policy.startDate),
+          endDate: toDate(policy.endDate),
+        });
       }
-
-      for (const importRow of lead.importRows) {
-        rows.push(baseRow(lead, "import_reference", {
-          recordDate: importRow.import.createdAt,
-          recordStatus: importRow.status,
-          recordNotes: importRow.error ?? "",
-          importFile: importRow.import.fileName,
-          importRow: String(importRow.rowIndex + 1),
-          createdAt: importRow.import.createdAt,
-        }));
-      }
+      if (!wroteRelatedRow) rows.push(rowFor(lead, {}));
     }
 
     const csv = "\uFEFF" + rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
@@ -158,63 +108,64 @@ export async function GET(req: Request) {
 
 type ExportLead = Awaited<ReturnType<typeof prisma.lead.findMany>>[number] & {
   customerType: string;
-  lastCallOutcome: string | null;
-  nextFollowUpAt: Date | null;
 };
 
-type RecordFields = {
-  recordDate?: Date | null;
-  recordStatus?: string;
-  recordChannel?: string;
-  recordDirection?: string;
-  recordOutcome?: string;
-  recordTitle?: string;
-  recordNotes?: string;
-  policyNumber?: string;
-  policyType?: string;
-  policyProvider?: string;
-  policyPremium?: string;
-  importFile?: string;
-  importRow?: string;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
+type CsvRecord = {
+  policyNumber: string;
+  policyType: string;
+  policyProvider: string;
+  policyStatus: string;
+  premium: string;
+  startDate: string;
+  endDate: string;
+  channel: string;
+  direction: string;
+  communicationDate: string;
+  communicationOutcome: string;
+  communicationSummary: string;
+  appointmentTitle: string;
+  appointmentDate: string;
+  appointmentStatus: string;
+  appointmentNotes: string;
 };
 
-function baseRow(lead: ExportLead, recordType: string, fields: RecordFields): string[] {
+function rowFor(lead: ExportLead, fields: Partial<CsvRecord>): string[] {
   return [
-    recordType,
-    lead.id,
+    lead.customerType,
     lead.idNumber,
     lead.firstName ?? "",
     lead.lastName ?? "",
-    [lead.firstName, lead.lastName].filter(Boolean).join(" "),
-    lead.customerType,
-    lead.status,
-    lead.lastCallOutcome ?? "",
-    toIso(lead.nextFollowUpAt),
+    lead.email ?? "",
     lead.phone ?? "",
     lead.altPhone ?? "",
-    lead.email ?? "",
-    lead.city ?? "",
     lead.address ?? "",
+    lead.city ?? "",
+    toDate(lead.birthDate),
+    lead.gender ?? "",
+    lead.status,
     lead.source ?? "",
-    lead.notes ?? "",
-    toIso(fields.recordDate),
-    fields.recordStatus ?? "",
-    fields.recordChannel ?? "",
-    fields.recordDirection ?? "",
-    fields.recordOutcome ?? "",
-    fields.recordTitle ?? "",
-    fields.recordNotes ?? "",
     fields.policyNumber ?? "",
     fields.policyType ?? "",
     fields.policyProvider ?? "",
-    fields.policyPremium ?? "",
-    fields.importFile ?? "",
-    fields.importRow ?? "",
-    toIso(fields.createdAt ?? lead.createdAt),
-    toIso(fields.updatedAt ?? lead.updatedAt),
+    fields.policyStatus ?? "",
+    fields.premium ?? "",
+    fields.startDate ?? "",
+    fields.endDate ?? "",
+    fields.channel ?? "",
+    fields.direction ?? "",
+    fields.communicationDate ?? "",
+    fields.communicationOutcome ?? "",
+    fields.communicationSummary ?? "",
+    fields.appointmentTitle ?? "",
+    fields.appointmentDate ?? "",
+    fields.appointmentStatus ?? "",
+    fields.appointmentNotes ?? "",
+    lead.notes ?? "",
   ];
+}
+
+function toDate(value: Date | null | undefined): string {
+  return value ? value.toISOString().split("T")[0] : "";
 }
 
 function toIso(value: Date | null | undefined): string {

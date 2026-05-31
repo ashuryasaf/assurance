@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/dal";
 import { handleError, ok, err } from "@/lib/api";
 import { leadScopeFilter } from "@/lib/crm/access";
 import { CUSTOMER_TYPES } from "@/lib/crm/workflow";
+import { reconcileStaleAppointments } from "@/lib/crm/reconcile";
 
 function isCustomerType(value: string): value is (typeof CUSTOMER_TYPES)[number] {
   return (CUSTOMER_TYPES as readonly string[]).includes(value);
@@ -11,6 +12,7 @@ function isCustomerType(value: string): value is (typeof CUSTOMER_TYPES)[number]
 export async function GET(req: Request) {
   try {
     const me = await requireRole("agent");
+    await reconcileStaleAppointments();
     const url = new URL(req.url);
     const customerType = url.searchParams.get("customerType");
     const status = url.searchParams.get("status") ?? "scheduled";
